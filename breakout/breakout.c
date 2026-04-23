@@ -42,7 +42,8 @@ void behaviorEntity(struct Entity *);
 void paddleControls(struct Entity *);
 
 //ball functions
-void ballCollisions(struct Entity *, struct Entity *, struct Entity *);
+void ballCollisions(struct Entity *, struct Entity *, struct Entity *, struct Sound);
+void ballBounceSound(struct Sound);
 
 int main() {
 
@@ -50,8 +51,11 @@ int main() {
   int screenHeight = 480;
 
   InitWindow(screenWidth, screenHeight, "breakout");
+  InitAudioDevice();
   SetTargetFPS(60);
 
+  Sound ballBounce = LoadSound("./sounds/ballBounce.wav");
+  Sound backgroundMusic = LoadSound("./sounds/bgMusic.wav");
   struct Entity paddle = {{128, screenHeight - 64, 96, 32}, WHITE, true, PADDLE};
   initEntity(&paddle);
   struct Entity ball = {{screenWidth / 2, screenHeight - 128, 16, 16}, WHITE, true, BALL};
@@ -75,9 +79,13 @@ int main() {
 
   while(!WindowShouldClose()) {
 
+    if(!IsSoundPlaying(backgroundMusic)) {
+      PlaySound(backgroundMusic);
+    }
+
     behaviorEntity(&paddle);
     behaviorEntity(&ball);
-    ballCollisions(&ball, &paddle, bricks);
+    ballCollisions(&ball, &paddle, bricks, ballBounce);
     
     for(int i = 0; i < 40; i++) {
       behaviorEntity(&bricks[i]);
@@ -144,33 +152,37 @@ void paddleControls(struct Entity * ent) {
   if(IsKeyDown(KEY_D)) {
     ent->rect.x += ent->paddle.speed;
   }
-
 }
 
-void ballCollisions(struct Entity * ball, struct Entity * paddle, struct Entity * bricks) {
+void ballCollisions(struct Entity * ball, struct Entity * paddle, struct Entity * bricks, struct Sound sound) {
 
   if (ball->rect.x < 0) {
     ball->rect.x += 2;
     ball->ball.speedX *= -1;
+    ballBounceSound(sound);
   }
 
   if(ball->rect.x + ball->rect.width > 640) {
     ball->rect.x -= 2;
     ball->ball.speedX *= -1;
+    ballBounceSound(sound);
   }
   
   if (ball->rect.y < 0 ) {
     ball->rect.y += 2;
     ball->ball.speedY *= -1;
+    ballBounceSound(sound);
   }
 
   if(ball->rect.y + ball->rect.height > 480) {
     ball->rect.y -= 2;
     ball->ball.speedY *= -1;
+    ballBounceSound(sound);
   }
 
   if(CheckCollisionRecs(ball->rect, paddle->rect)) {
     ball->ball.speedY *= -1;
+    ballBounceSound(sound);
   }
 
   for(int i = 0; i < 40; i++) {
@@ -178,6 +190,11 @@ void ballCollisions(struct Entity * ball, struct Entity * paddle, struct Entity 
       if(CheckCollisionRecs(ball->rect, bricks[i].rect)) {
         bricks[i].brick.health = 0;
         ball->ball.speedY *= -1;
+        ballBounceSound(sound);
       }
   }
+}
+
+void ballBounceSound(struct Sound sound) {
+  PlaySound(sound);
 }
