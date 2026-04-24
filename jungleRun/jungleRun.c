@@ -70,6 +70,9 @@ struct entityList {
 void initEntity(struct Entity *, enum entityType, Vector2);
 void drawEntity(struct Entity *);
 
+//Entity List Function
+void reallocEntityList(struct entityList *);
+
 //Player Functions
 void playerPhysics(struct Entity *, struct entityList *);
 void playerControls(struct Entity *);
@@ -88,15 +91,17 @@ int main() {
   SetTargetFPS(60);
 
   struct Entity player;
-  initEntity(&player, PLAYER, (Vector2){16, 16});
+  initEntity(&player, PLAYER, (Vector2){0, 16});
 
   struct entityList grassBlocks;
-  grassBlocks.capacity = 100;
+  grassBlocks.capacity = 10;
   grassBlocks.counter = 0;
   grassBlocks.ents = malloc(grassBlocks.capacity * sizeof (struct Entity));
 
-  for(int i = 0; i < 10; i++) {
-    for(int j = 0; j < 4; j++) {
+  Rectangle grassBlockExtender = {0, 0, 16, 64};
+
+  for(int i = 0; i < 1; i++) {
+    for(int j = 0; j < 5; j++) {
        initEntity(&grassBlocks.ents[grassBlocks.counter], BLOCK, (Vector2){i * 16, j * 16 + 64});
        grassBlocks.counter++;
     }
@@ -117,16 +122,33 @@ int main() {
     playerPhysics(&player, &grassBlocks);
     camera.target = (Vector2){player.destRect.x + 8, player.destRect.y + 8};
     playerControls(&player);
+
+    if(CheckCollisionRecs(player.destRect, grassBlockExtender)) {
+      int choices[3] = {16, 32, 48};
+      grassBlockExtender.x += choices[0];
+      for(int i = 0; i < 1; i++) {
+        for(int j = 0; j < 5; j++) {
+           initEntity(&grassBlocks.ents[grassBlocks.counter], BLOCK, (Vector2){grassBlockExtender.x + (i * 16), grassBlockExtender.y + (j * 16 + 64)});
+           grassBlocks.counter++;
+            for(int i = 0; i < grassBlocks.counter; i++) {
+              blockWeightChecker(&grassBlocks.ents[i], grassBlocks.ents, grassBlocks.capacity);
+              blockSourceDestChecker(&grassBlocks.ents[i]);
+            }
+        }
+      }
+      reallocEntityList(&grassBlocks);
+    }
     
     BeginDrawing();
     ClearBackground(BLACK);
 
     BeginMode2D(camera);
       drawEntity(&player);
+      DrawRectangleRec(grassBlockExtender, ORANGE);
 
-      for(int i = 0; i < 100; i++) {
+      for(int i = 0; i < grassBlocks.counter; i++) {
         // blockWeightChecker(&grassTiles[i], grassTiles, 100);
-        blockSourceDestChecker(&grassBlocks.ents[i]);
+        // blockSourceDestChecker(&grassBlocks.ents[i]);
         drawEntity(&grassBlocks.ents[i]);
       }
     EndMode2D();
@@ -176,6 +198,14 @@ void drawEntity(struct Entity * ent) {
     // if(ent->et == BLOCK)
     //   DrawText(TextFormat("%d", ent->b.blockWeight), ent->destRect.x, ent->destRect.y, 8, WHITE); 
   }
+}
+
+void reallocEntityList(struct entityList * entList) {
+  if(entList->counter >= entList->capacity / 2) {
+    entList->capacity *= 2;
+  }
+
+  entList->ents = realloc(entList->ents, entList->capacity * sizeof (struct Entity));
 }
 
 void playerPhysics(struct Entity * player, struct entityList * blocks) {
@@ -268,7 +298,7 @@ void blockSourceDestChecker(struct Entity * ent) {
   // }
   
   //middle top grass block
-  if(ent->b.blockWeight == 3 && ent->b.blockBools.UP == false) {
+  if((ent->b.blockWeight == 3 || ent->b.blockWeight == 1)&& ent->b.blockBools.UP == false) {
     ent->sourceRect.x = 16;
     ent->sourceRect.y = 0;
   }
