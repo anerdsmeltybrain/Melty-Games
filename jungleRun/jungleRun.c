@@ -7,6 +7,12 @@ enum entityType {
   BLOCK,
 };
 
+enum playerType {
+  SWORDSMEN,
+  RANGER,
+  MAGE
+};
+
 enum itemType {
   HEALTH,
   COIN,
@@ -15,6 +21,7 @@ enum itemType {
 };
 
 enum blockType {
+  MOBSPAWNER,
   GRASS,
   DIRT,
   LEAVES,
@@ -49,6 +56,12 @@ struct Item {
   Color color;
 };
 
+struct entityList {
+  int capacity;
+  int counter;
+  struct Entity * ents;
+};
+
 struct Entity {
   enum entityType et;
   Rectangle sourceRect;
@@ -60,6 +73,7 @@ struct Entity {
    struct {
      int health;
      int speed;
+     enum playerType pt;
    } p;
    struct {
      int health;
@@ -70,18 +84,18 @@ struct Entity {
    struct {
      Rectangle blockChecker;
      enum blockCheck bc;
+     enum blockType bt;
      int blockWeight;
      struct {
        bool UP, RIGHT, DOWN, LEFT;
      } blockBools;
+     struct {
+      int maxEntities, timeCounter;
+      enum mobType mt;
+      struct entityList mobs;
+     } mobSpawnerProps;
    } b;
  }; 
-};
-
-struct entityList {
-  int capacity;
-  int counter;
-  struct Entity * ents;
 };
 
 struct itemList {
@@ -92,6 +106,10 @@ struct itemList {
 
 //Entity Functions
 void initEntity(struct Entity *, enum entityType, Vector2);
+void initEntityPlayer(struct Entity *, enum entityType, enum playerType, Vector2);
+void initEntityMob(struct Entity *, enum entityType, enum mobType, Vector2);
+void initEntityBlock(struct Entity *, enum entityType, enum blockType, Vector2);
+void initEntityBlockSpawner(struct Entity *, enum entityType, enum blockType, enum mobType, Vector2);
 void drawEntity(struct Entity *);
 
 //Entity List Function
@@ -110,6 +128,9 @@ void playerControls(struct Entity *);
 void mobPhysics(struct Entity *, struct entityList *); 
 void mobAnimations(struct Entity *);
 
+//Mob Spawner Functions
+void mobSpawnerProcess(struct Entity *);
+
 //Block Functions
 void blockWeightChecker(struct Entity *, struct Entity *, int);
 void blockSourceDestChecker(struct Entity *);
@@ -125,13 +146,15 @@ int main() {
   //all things player
   /* ---------------------------------------------------------- */
   struct Entity player;
-  initEntity(&player, PLAYER, (Vector2){0, 16});
+  initEntityPlayer(&player, PLAYER, RANGER, (Vector2){0, 16});
   /* ---------------------------------------------------------- */
 
   //all things mobs
-  struct Entity slime;
-  slime.m.mt = SLIME;
-  initEntity(&slime, MOB, (Vector2){0, 16});
+  /* ---------------------------------------------------------- */
+  struct Entity slimeSpawner;
+  initEntityBlockSpawner(&slimeSpawner, BLOCK, MOBSPAWNER, SLIME, (Vector2){96, 48});
+  /* ---------------------------------------------------------- */
+
 
   // all the grass on the screen
   /* ---------------------------------------------------------- */
@@ -140,10 +163,8 @@ int main() {
   grassBlocks.counter = 0;
   grassBlocks.ents = malloc(grassBlocks.capacity * sizeof (struct Entity));
 
-  Rectangle grassBlockExtender = {0, 0, 16, 80};
-
-  for(int i = 0; i < 100; i++) {
-    for(int j = 0; j < 5; j++) {
+  for(int i = 0; i < 25; i++) {
+    for(int j = 0; j < 3; j++) {
        initEntity(&grassBlocks.ents[grassBlocks.counter], BLOCK, (Vector2){i * 16, j * 16 + 64});
        grassBlocks.counter++;
     }
@@ -154,19 +175,7 @@ int main() {
     blockSourceDestChecker(&grassBlocks.ents[i]);
   }
   /* ---------------------------------------------------------- */
-  //coins
-  struct itemList coins;
-  coins.capacity = 100;
-  coins.counter = 0;
-  coins.items = malloc(coins.capacity * sizeof(struct Item));
   
-  for(int i = 0; i < 20; i++) {
-    for(int j = 0; j < 2; j++) {
-      initItem(&coins.items[coins.counter], COIN, (Vector2){i * 16, j * 16 + 32});
-      coins.counter++;
-    }
-  }
-
   //camera functionalities
   Camera2D camera = { 0 };
   camera.offset = (Vector2){screenWidth / 2, screenHeight / 2};
@@ -175,46 +184,21 @@ int main() {
   camera.zoom = 2.0f;
 
   while(!WindowShouldClose()) {
-    playerPhysics(&player, &grassBlocks);
     camera.target = (Vector2){player.destRect.x + 8, player.destRect.y + 8};
+    playerPhysics(&player, &grassBlocks);
     playerControls(&player);
 
-    mobPhysics(&slime, &grassBlocks);
-    mobAnimations(&slime);
-
-    // slime.sourceRect.x += 16;
-
-    for(int i = 0; i < grassBlocks.counter; i++) {
-      if(CheckCollisionRecs(grassBlocks.ents[i].destRect, grassBlockExtender)) {
-        int choices[6] = {16, 32, 48, 64, 80, 160};
-        grassBlockExtender.x += choices[GetRandomValue(0, 5)];
-        for(int i = 0; i < 5; i++) {
-          for(int j = 0; j < 1; j++) {
-             initEntity(&grassBlocks.ents[grassBlocks.counter], BLOCK, (Vector2){grassBlockExtender.x + (i * 16 + 32), grassBlockExtender.y + (j * 16 + 16)});
-             grassBlocks.counter++;
-              for(int i = 0; i < grassBlocks.counter; i++) {
-                blockWeightChecker(&grassBlocks.ents[i], grassBlocks.ents, grassBlocks.capacity);
-                blockSourceDestChecker(&grassBlocks.ents[i]);
-              }
-          }
-        }
-        reallocEntityList(&grassBlocks);
-      }
-    }
-
-    for(int i = 0; i < coins.counter; i++) {
-      if(CheckCollisionRecs(player.destRect, coins.items[i].destRect) && coins.items[i].isActive) {
-        coins.items[i].isActive = false;
-        playerScore++;
-      }
+    mobSpawnerProcess(&slimeSpawner);
+    for(int i = 0; i < slimeSpawner.b.mobSpawnerProps.mobs.counter; i++) {
+      mobAnimations(&slimeSpawner.b.mobSpawnerProps.mobs.ents[i]);
+      mobPhysics(&slimeSpawner.b.mobSpawnerProps.mobs.ents[i], &grassBlocks);
     }
     
     BeginDrawing();
     ClearBackground(BLACK);
 
+    DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
     BeginMode2D(camera);
-      DrawRectangleRec(grassBlockExtender, ORANGE);
-      DrawText(TextFormat("Score: %d", playerScore), 0, 0, 16, WHITE);
 
       for(int i = 0; i < grassBlocks.counter; i++) {
         // blockWeightChecker(&grassTiles[i], grassTiles, 100);
@@ -222,10 +206,11 @@ int main() {
         drawEntity(&grassBlocks.ents[i]);
       }
 
-      for(int i = 0; i < coins.counter; i++) {
-        drawItem(&coins.items[i]);
+      drawEntity(&slimeSpawner);
+      for(int i = 0; i < slimeSpawner.b.mobSpawnerProps.mobs.counter; i++) {
+        drawEntity(&slimeSpawner.b.mobSpawnerProps.mobs.ents[i]);
       }
-      drawEntity(&slime);
+
       drawEntity(&player);
     EndMode2D();
 
@@ -251,21 +236,8 @@ void initEntity(struct Entity * ent, enum entityType et, Vector2 pos) {
       break;
     case MOB:
       ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
-      ent->sourceRect = (Rectangle){pos.x, pos.y, 16, 16};
+      ent->sourceRect = (Rectangle){0, 0, 16, 16};
       ent->color = WHITE;
-      switch(ent->m.mt) {
-        case SLIME:
-        ent->texture = LoadTexture("./assets/slime.png");
-        ent->m.health = 1;
-        ent->m.speed = 1;
-          break;
-        case GOBLIN:
-          break;
-        case GOLEM:
-          break;
-        case BAT:
-          break;
-      }
       break;
     case BLOCK:
       ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
@@ -279,6 +251,140 @@ void initEntity(struct Entity * ent, enum entityType et, Vector2 pos) {
       ent->b.blockBools.RIGHT = false;
       ent->b.blockBools.DOWN = false;
       ent->b.blockBools.LEFT = false;
+      break;
+  }
+}
+
+
+void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType pt, Vector2 pos) {
+  ent->et = et;
+  ent->isActive = true;
+  ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
+  ent->sourceRect = (Rectangle){pos.x, pos.y, 16, 16};
+  ent->color = WHITE;
+  ent->p.pt = pt;
+
+  switch(ent->p.pt) {
+    case SWORDSMEN:
+      ent->texture = LoadTexture("./assets/swordsmen.png");
+      ent->p.health = 5;
+      ent->p.speed = 3;
+      break;
+    case RANGER:
+      ent->texture = LoadTexture("./assets/ranger.png");
+      ent->p.health = 3;
+      ent->p.speed = 5;
+      break;
+    case MAGE:
+      ent->texture = LoadTexture("./assets/mage.png");
+      ent->p.health = 4;
+      ent->p.speed = 4;
+      break;
+  }
+}
+
+void initEntityMob(struct Entity * ent, enum entityType et, enum mobType mt, Vector2 pos) {
+  ent->et = et;
+  ent->isActive = true;
+  ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
+  ent->sourceRect = (Rectangle){0, 0, 16, 16};
+  ent->color = WHITE;
+  ent->m.mt = mt;
+
+  switch(ent->m.mt) {
+    case SLIME:
+    ent->texture = LoadTexture("./assets/slime.png");
+    ent->m.health = 1;
+    ent->m.speed = 1;
+      break;
+    case GOBLIN:
+    ent->texture = LoadTexture("./assets/goblin.png");
+    ent->m.health = 2;
+    ent->m.speed = 1;
+      break;
+    case GOLEM:
+    ent->texture = LoadTexture("./assets/golem.png");
+    ent->m.health = 3;
+    ent->m.speed = 1;
+      break;
+    case BAT:
+    ent->texture = LoadTexture("./assets/bat.png");
+    ent->m.health = 1;
+    ent->m.speed = 1;
+      break;
+  }
+}
+
+void initEntityBlock(struct Entity * ent, enum entityType et, enum blockType bt, Vector2 pos) {
+  ent->et = et;
+  ent->isActive = true;
+  ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
+  ent->sourceRect = (Rectangle){0, 0, 16, 16};
+  ent->color = WHITE;
+  ent->b.bt = bt;
+  ent->b.blockChecker = (Rectangle){ent->destRect.x + 8, ent->destRect.y + 8, 8, 8};
+  ent->b.bc = NONE;
+  ent->b.blockWeight = 0;
+  ent->b.blockBools.UP = false;
+  ent->b.blockBools.RIGHT = false;
+  ent->b.blockBools.DOWN = false;
+  ent->b.blockBools.LEFT = false;
+
+  switch(ent->b.bt) {
+    case GRASS:
+      ent->texture = LoadTexture("./assets/grassTileSet.png");
+      break;
+    case DIRT:
+      ent->texture = LoadTexture("./assets/dirtTileSet.png");
+      break;
+    case LEAVES:
+      ent->texture = LoadTexture("./assets/leavesTileSet.png");
+      break;
+    case TRUNK:
+      ent->texture = LoadTexture("./assets/trunksTileSet.png");
+      break;
+  }
+}
+
+void initEntityBlockSpawner(struct Entity * ent, enum entityType et, enum blockType bt, enum mobType mt, Vector2 pos) {
+  ent->et = et;
+  ent->isActive = true;
+  ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
+  ent->texture = LoadTexture("./assets/enemySpawners.png");
+  ent->color = WHITE;
+  ent->b.bt = bt;
+  ent->b.blockChecker = (Rectangle){ent->destRect.x + 8, ent->destRect.y + 8, 8, 8};
+  ent->b.bc = NONE;
+  ent->b.blockWeight = 0;
+  ent->b.blockBools.UP = false;
+  ent->b.blockBools.RIGHT = false;
+  ent->b.blockBools.DOWN = false;
+  ent->b.blockBools.LEFT = false;
+  ent->b.mobSpawnerProps.mt = mt;
+  ent->b.mobSpawnerProps.mobs.counter = 0;
+  ent->b.mobSpawnerProps.mobs.capacity = 1;
+  ent->b.mobSpawnerProps.mobs.ents = malloc(sizeof(struct Entity));
+
+  switch(ent->b.mobSpawnerProps.mt) {
+    case SLIME:
+      ent->sourceRect = (Rectangle){0, 0, 16, 16};
+      ent->b.mobSpawnerProps.maxEntities = 5;
+      ent->b.mobSpawnerProps.timeCounter = 30;
+      break;
+    case GOBLIN:
+      ent->sourceRect = (Rectangle){16, 0, 16, 16};
+      ent->b.mobSpawnerProps.maxEntities = 5;
+      ent->b.mobSpawnerProps.timeCounter = 45;
+      break;
+    case GOLEM:
+      ent->sourceRect = (Rectangle){32, 0, 16, 16};
+      ent->b.mobSpawnerProps.maxEntities = 5;
+      ent->b.mobSpawnerProps.timeCounter = 60;
+      break;
+    case BAT:
+      ent->sourceRect = (Rectangle){48, 0, 16, 16};
+      ent->b.mobSpawnerProps.maxEntities = 5;
+      ent->b.mobSpawnerProps.timeCounter = 30;
       break;
   }
 }
@@ -371,10 +477,15 @@ void playerControls(struct Entity * player) {
 void mobPhysics(struct Entity * mob, struct entityList * blocks) {
   static int fallSpeed = 1;
   mob->destRect.y += fallSpeed;
+  mob->destRect.x += mob->m.speed;
   
     for(int i = 0; i < blocks->capacity; i++) {
       if(CheckCollisionRecs(mob->destRect, blocks->ents[i].destRect)) {
         mob->destRect.y -= fallSpeed;
+      }
+
+      if(CheckCollisionRecs(mob->destRect, blocks->ents[i].destRect) && blocks->ents[i].b.blockWeight == 2) {
+        mob->m.speed *= -1;
       }
     }
 }
@@ -388,8 +499,26 @@ void mobAnimations(struct Entity * mob) {
       break;
     case GOBLIN:
       break;
+    case GOLEM:
+      break;
+    case BAT:
+      break;
   }
   i++;
+}
+
+void mobSpawnerProcess(struct Entity * ent) {
+  
+  static int timerCount = 0;
+
+  if((timerCount % ent->b.mobSpawnerProps.timeCounter == 0) && (ent->b.mobSpawnerProps.mobs.capacity <= ent->b.mobSpawnerProps.maxEntities)) {
+    ent->b.mobSpawnerProps.mobs.capacity++;
+    ent->b.mobSpawnerProps.mobs.ents = realloc(ent->b.mobSpawnerProps.mobs.ents, ent->b.mobSpawnerProps.mobs.capacity * sizeof (struct Entity));
+    initEntityMob(&ent->b.mobSpawnerProps.mobs.ents[ent->b.mobSpawnerProps.mobs.counter], MOB, ent->b.mobSpawnerProps.mt, (Vector2){ent->destRect.x, ent->destRect.y});
+    ent->b.mobSpawnerProps.mobs.counter++;
+  }
+
+  timerCount++;
 }
 
 void blockWeightChecker(struct Entity * block, struct Entity * blocks, int blockAmount) {
