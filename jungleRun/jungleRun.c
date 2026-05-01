@@ -393,8 +393,8 @@ void drawEntity(struct Entity * ent) {
 
   if(ent->isActive) {
     DrawTexturePro(ent->texture, ent->sourceRect, ent->destRect, (Vector2){0.0, 0.0}, 0.0f, ent->color);
-    // if(ent->et == BLOCK)
-    //   DrawText(TextFormat("%d", ent->b.blockWeight), ent->destRect.x, ent->destRect.y, 8, WHITE); 
+    if(ent->et == BLOCK)
+      DrawText(TextFormat("%d", ent->b.blockWeight), ent->destRect.x, ent->destRect.y, 8, WHITE); 
   }
 }
 
@@ -482,10 +482,9 @@ void mobPhysics(struct Entity * mob, struct entityList * blocks) {
     for(int i = 0; i < blocks->capacity; i++) {
       if(CheckCollisionRecs(mob->destRect, blocks->ents[i].destRect)) {
         mob->destRect.y -= fallSpeed;
-      }
-
-      if(CheckCollisionRecs(mob->destRect, blocks->ents[i].destRect) && blocks->ents[i].b.blockWeight == 2) {
-        mob->m.speed *= -1;
+        if (blocks->ents[i].b.blockWeight == 2) {
+          mob->m.speed *= -1;
+        }
       }
     }
 }
