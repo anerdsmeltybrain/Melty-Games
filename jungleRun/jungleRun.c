@@ -13,7 +13,24 @@ enum playerType {
   MAGE
 };
 
+enum playerAbilities {
+  NOABS,
+  //SWORDSMEN ABILTITIES
+  AIRSLASH,
+  RISINGSLASH,
+  PARRY,
+  //RANGER ABILITIES
+  SUPERCHARGEDSHOT,
+  BACKROLL,
+  SNARETRAP,
+  //MAGE ABILITIES
+  GALVANICWALL,
+  BOUNCEFORCE,
+  BUBBLESHIELD
+};
+
 enum itemType {
+  NAI,
   HEALTH,
   COIN,
   SPEED,
@@ -54,12 +71,20 @@ struct Item {
   Texture2D texture;
   bool isActive;
   Color color;
+  int quantity;
+  int gravCounter;
 };
 
 struct entityList {
   int capacity;
   int counter;
   struct Entity * ents;
+};
+
+struct itemList {
+  int capacity;
+  int counter;
+  struct Item * items;
 };
 
 struct Entity {
@@ -73,14 +98,18 @@ struct Entity {
    struct {
      int health;
      int speed;
+     int boosts;
+     int bombs;
      enum playerType pt;
+
    } p;
    struct {
      int health;
      int speed;
      enum mobType mt;
+     int EXP;
      bool isDefeated;
-     struct Item dropTable[2];
+     struct itemList drops;
    } m;
    struct {
      Rectangle blockChecker;
@@ -97,12 +126,6 @@ struct Entity {
      } mobSpawnerProps;
    } b;
  }; 
-};
-
-struct itemList {
-  int capacity;
-  int counter;
-  struct Item * items;
 };
 
 struct game {
@@ -139,6 +162,7 @@ void gameMobPlayerInter(struct game *);
 //Item List Function
 void initItem(struct Item *, enum itemType, Vector2); 
 void drawItem(struct Item *);
+void itemPhysics(struct game *, struct Item *);
 void reallocItemList(struct itemList *);
 
 //Player Functions
@@ -146,7 +170,7 @@ void playerPhysics(struct Entity *, struct entityList *);
 void playerControls(struct Entity *);
 
 //Mob Functions
-void mobPhysics(struct Entity *, struct entityList *); 
+void mobPhysics(struct game *, struct Entity *, struct entityList *); 
 void mobAnimations(struct Entity *);
 
 //Mob Spawner Functions
@@ -170,7 +194,7 @@ int main() {
 
   //all things player
   /* ---------------------------------------------------------- */
-  addGamePlayer(&mainGame, mainGame.players, PLAYER, MAGE, (Vector2){0, 16});
+  addGamePlayer(&mainGame, mainGame.players, PLAYER, RANGER, (Vector2){0, 16});
   /* ---------------------------------------------------------- */
 
   //all things mobs
@@ -210,7 +234,7 @@ int main() {
       if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].b.mobSpawnerProps.mt == SLIME) {
         mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, SLIME, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
         for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
-          mobPhysics(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
+          mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
           mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
         }
       }
@@ -218,16 +242,22 @@ int main() {
     }
 
     for(int i = 0; i < mainGame.mobs->counter; i++) {
-      mobPhysics(&mainGame.mobs->ents[i], mainGame.blocks);
+      mobPhysics(&mainGame, &mainGame.mobs->ents[i], mainGame.blocks);
       mobAnimations(&mainGame.mobs->ents[i]);
     }
 
     gameMobPlayerInter(&mainGame);
+
+    for(int i = 0; i < mainGame.items->counter; i++) {
+      itemPhysics(&mainGame, &mainGame.items->items[i]);
+      
+    }
     
     BeginDrawing();
     ClearBackground(BLACK);
 
-    DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
+    // DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
+    drawAbility(&mainGame.players->ents[0]);
     BeginMode2D(camera);
 
       drawGame(&mainGame);
@@ -283,6 +313,8 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   ent->sourceRect = (Rectangle){pos.x, pos.y, 16, 16};
   ent->color = WHITE;
   ent->p.pt = pt;
+  ent->p.bombs = 3;
+  ent->p.boosts = 0;
 
   switch(ent->p.pt) {
     case SWORDSMEN:
@@ -303,6 +335,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   }
 }
 
+
 void initEntityMob(struct Entity * ent, enum entityType et, enum mobType mt, Vector2 pos) {
   ent->et = et;
   ent->isActive = true;
@@ -317,23 +350,40 @@ void initEntityMob(struct Entity * ent, enum entityType et, enum mobType mt, Vec
     ent->texture = LoadTexture("./assets/slime.png");
     ent->m.health = 1;
     ent->m.speed = 1;
+    ent->m.EXP = 10;
+    ent->m.drops.capacity = 1;
+    ent->m.drops.counter = 0;
+    ent->m.drops.items = malloc(ent->m.drops.capacity * sizeof (struct Item));
       break;
     case GOBLIN:
     ent->texture = LoadTexture("./assets/goblin.png");
     ent->m.health = 2;
     ent->m.speed = 1;
+    ent->m.EXP = 20;
+    ent->m.drops.capacity = 2;
+    ent->m.drops.counter = 0;
+    ent->m.drops.items = malloc(ent->m.drops.capacity * sizeof (struct Item));
       break;
     case GOLEM:
     ent->texture = LoadTexture("./assets/golem.png");
     ent->m.health = 3;
     ent->m.speed = 1;
+    ent->m.EXP = 30;
+    ent->m.drops.capacity = 3;
+    ent->m.drops.counter = 0;
+    ent->m.drops.items = malloc(ent->m.drops.capacity * sizeof (struct Item));
       break;
     case BAT:
     ent->texture = LoadTexture("./assets/bat.png");
     ent->m.health = 1;
     ent->m.speed = 1;
+    ent->m.EXP = 10;
+    ent->m.drops.capacity = 1;
+    ent->m.drops.counter = 0;
+    ent->m.drops.items = malloc(ent->m.drops.capacity * sizeof (struct Item));
       break;
   }
+
 }
 
 void initEntityBlock(struct Entity * ent, enum entityType et, enum blockType bt, Vector2 pos) {
@@ -520,6 +570,21 @@ void addGameBlockSpawner(struct game * gm, struct entityList * el, enum entityTy
   }
 }
 
+void addGameItem(struct game * gm, struct itemList * el, enum itemType it, Vector2 pos) {
+  
+  if (gm->items->counter == 0) {
+    // gm->items->ents = realloc(gm->items->ents, sizeof (struct Entity));
+    initItem(&gm->items->items[gm->items->counter], it, pos);
+    gm->items->counter++;
+  } else {
+    gm->items->capacity++;
+    // gm->items->ents = realloc(gm->items->ents, gm->items->capacity * sizeof (struct Entity));
+    reallocItemList(gm->items);
+    initItem(&gm->items->items[gm->items->counter], it, pos);
+    gm->items->counter++;
+  }
+}
+
 void drawGame(struct game * gm) {
 
   for(int i = 0; i < gm->blocks->counter; i++) {
@@ -539,9 +604,10 @@ void drawGame(struct game * gm) {
     drawEntity(&gm->players->ents[i]);
   }
   
-  // for(int i = 0; i < gm->items->counter; i++) {
-  //   drawItem(&gm->items->items[i]);
-  // }
+  for(int i = 0; i < gm->items->counter; i++) {
+    drawItem(&gm->items->items[i]);
+    DrawText(TextFormat("%d", gm->items->items[i].quantity), gm->items->items[i].destRect.x, gm->items->items[i].destRect.y - 8, 4, WHITE);
+  }
 }
 
 void gameMobPlayerInter(struct game * gm) {
@@ -568,19 +634,36 @@ void gameMobPlayerInter(struct game * gm) {
 void initItem(struct Item * item, enum itemType it, Vector2 pos) {
   item->it = it;
   item->isActive = true;
+  item->gravCounter = 0;
 
   switch(item->it) {
     case HEALTH:
+      item->destRect = (Rectangle){pos.x, pos.y, 8, 8};
+      item->sourceRect = (Rectangle){0, 0, 8, 8};
+      item->texture = LoadTexture("./assets/heart.png");
+      item->color = WHITE;
+      item->quantity = 3;
       break;
     case COIN:
       item->destRect = (Rectangle){pos.x, pos.y, 8, 8};
       item->sourceRect = (Rectangle){0, 0, 8, 8};
       item->texture = LoadTexture("./assets/coin.png");
       item->color = WHITE;
+      item->quantity = GetRandomValue(5, 30);
       break;
     case SPEED:
+      item->destRect = (Rectangle){pos.x, pos.y, 8, 8};
+      item->sourceRect = (Rectangle){0, 0, 8, 8};
+      item->texture = LoadTexture("./assets/speed.png");
+      item->color = WHITE;
+      item->quantity = 1;
       break;
     case BOMB:
+      item->destRect = (Rectangle){pos.x, pos.y, 8, 8};
+      item->sourceRect = (Rectangle){0, 0, 8, 8};
+      item->texture = LoadTexture("./assets/bomb.png");
+      item->color = WHITE;
+      item->quantity = 1;
       break;
   }
 }
@@ -593,6 +676,27 @@ void drawItem(struct Item * item) {
     //   DrawText(TextFormat("%d", ent->b.blockWeight), ent->destRect.x, ent->destRect.y, 8, WHITE); 
   }
 }
+
+
+void itemPhysics(struct game * gm, struct Item * it) {
+
+  float fallSpeed = 0.1f;
+  if(it->gravCounter > 15) 
+    it->destRect.y += fallSpeed;
+  else
+    it->destRect.y -= fallSpeed;
+
+  for(int i = 0; i < gm->blocks->counter; i++) {
+    if(CheckCollisionRecs(it->destRect, gm->blocks->ents[i].destRect)) {
+      it->destRect.y -= fallSpeed;
+      it->gravCounter = 0;
+    }
+  }
+
+  it->gravCounter++;
+  
+}
+
 void reallocEntityList(struct entityList * entList) {
   if(entList->counter >= entList->capacity / 2) {
     entList->capacity *= 2;
@@ -641,7 +745,7 @@ void playerControls(struct Entity * player) {
     }
 }
 
-void mobPhysics(struct Entity * mob, struct entityList * blocks) {
+void mobPhysics(struct game * gm, struct Entity * mob, struct entityList * blocks) {
   static int fallSpeed = 1;
   mob->destRect.y += fallSpeed;
   mob->destRect.x += mob->m.speed;
@@ -656,6 +760,15 @@ void mobPhysics(struct Entity * mob, struct entityList * blocks) {
     }
 
     if(mob->m.health <= 0) {
+      if(mob->m.isDefeated == false) {
+        for(int i = 0; i < mob->m.drops.capacity; i++) {
+          int choice = GetRandomValue(1, 4);
+          // initItem(&mob->m.drops.items[mob->m.drops.counter], choice, (Vector2){mob->destRect.x + GetRandomValue(-32, 32), mob->destRect.y});
+          addGameItem(gm, gm->items, choice, (Vector2){mob->destRect.x + GetRandomValue(-32, 32), mob->destRect.y});
+          mob->m.drops.counter++;
+        }
+        // mob->m.isDefeated = true;
+      }
       mob->isActive = false;
     }
 }
