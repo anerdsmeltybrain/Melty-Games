@@ -79,6 +79,7 @@ struct Entity {
      int health;
      int speed;
      enum mobType mt;
+     bool isDefeated;
      struct Item dropTable[2];
    } m;
    struct {
@@ -90,7 +91,7 @@ struct Entity {
        bool UP, RIGHT, DOWN, LEFT;
      } blockBools;
      struct {
-      int maxEntities, timeCounter;
+      int maxEntities, timeCounter, numOfMobs;
       enum mobType mt;
       struct entityList mobs;
      } mobSpawnerProps;
@@ -208,7 +209,12 @@ int main() {
     for(int i = 0; i < mainGame.blocks->counter; i++) {
       if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].b.mobSpawnerProps.mt == SLIME) {
         mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, SLIME, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
+        for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
+          mobPhysics(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
+          mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
+        }
       }
+
     }
 
     for(int i = 0; i < mainGame.mobs->counter; i++) {
@@ -304,6 +310,7 @@ void initEntityMob(struct Entity * ent, enum entityType et, enum mobType mt, Vec
   ent->sourceRect = (Rectangle){0, 0, 16, 16};
   ent->color = WHITE;
   ent->m.mt = mt;
+  ent->m.isDefeated = false;
 
   switch(ent->m.mt) {
     case SLIME:
@@ -399,6 +406,7 @@ void initEntityBlockSpawner(struct Entity * ent, enum entityType et, enum blockT
       break;
   }
 
+  ent->b.mobSpawnerProps.numOfMobs = 0;
   ent->b.mobSpawnerProps.mobs.capacity = ent->b.mobSpawnerProps.maxEntities;
   ent->b.mobSpawnerProps.mobs.counter = 0;
   ent->b.mobSpawnerProps.mobs.ents = malloc(ent->b.mobSpawnerProps.mobs.capacity * sizeof(struct Entity));
@@ -411,7 +419,7 @@ void drawEntity(struct Entity * ent) {
     // if(ent->et == BLOCK)
     //   DrawText(TextFormat("%d", ent->b.blockWeight), ent->destRect.x, ent->destRect.y, 8, WHITE); 
     if((ent->b.bt == MOBSPAWNER) && (ent->et == BLOCK)) {
-      DrawText(TextFormat("%d", ent->b.mobSpawnerProps.mobs.counter), ent->destRect.x, ent->destRect.y, 8, WHITE); 
+      DrawText(TextFormat("%d", ent->b.mobSpawnerProps.numOfMobs), ent->destRect.x, ent->destRect.y, 8, WHITE); 
     }
     if((ent->et == MOB)) {
       DrawText(TextFormat("%d", ent->m.health), ent->destRect.x, ent->destRect.y, 8, WHITE); 
@@ -516,6 +524,11 @@ void drawGame(struct game * gm) {
 
   for(int i = 0; i < gm->blocks->counter; i++) {
     drawEntity(&gm->blocks->ents[i]);
+    if(gm->blocks->ents[i].b.bt == MOBSPAWNER) {
+      for(int j = 0; j < gm->blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
+        drawEntity(&gm->blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
+      }
+    }
   }
 
   for(int i = 0; i < gm->mobs->counter; i++) {
@@ -537,6 +550,16 @@ void gameMobPlayerInter(struct game * gm) {
     for(int j = 0; j < gm->mobs->counter; j++) {
       if(CheckCollisionRecs(gm->players->ents[i].destRect, gm->mobs->ents[j].destRect)) {
         gm->mobs->ents[j].m.health -= 1;
+      }
+    }
+
+    for(int j = 0; j < gm->blocks->counter; j++) {
+      if(gm->blocks->ents[j].b.bt == MOBSPAWNER) {
+        for(int k = 0; k < gm->blocks->ents[j].b.mobSpawnerProps.mobs.counter; k++) {
+          if(CheckCollisionRecs(gm->players->ents[i].destRect, gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].destRect)) {
+            gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].m.health -= 1;
+          }
+        }
       }
     }
   }  
@@ -658,17 +681,24 @@ void mobSpawnerProcess(struct Entity * mobSpawner, struct game * gm, enum entity
   
   static int timerCount = 0;
 
-  if((timerCount % mobSpawner->b.mobSpawnerProps.timeCounter == 0) && (mobSpawner->b.mobSpawnerProps.mobs.counter < mobSpawner->b.mobSpawnerProps.maxEntities)) {
-    addGameMob(gm, gm->mobs, et, mt, pos);
+  if((timerCount % mobSpawner->b.mobSpawnerProps.timeCounter == 0) && (mobSpawner->b.mobSpawnerProps.numOfMobs < mobSpawner->b.mobSpawnerProps.maxEntities)) {
+    // addGameMob(gm, gm->mobs, et, mt, pos);
 
-    mobSpawner->b.mobSpawnerProps.mobs.ents[mobSpawner->b.mobSpawnerProps.mobs.counter] = gm->mobs->ents[gm->mobs->counter - 1];
+    initEntityMob(&mobSpawner->b.mobSpawnerProps.mobs.ents[mobSpawner->b.mobSpawnerProps.mobs.counter], MOB, mobSpawner->b.mobSpawnerProps.mt, pos);
+
+
+    // mobSpawner->b.mobSpawnerProps.mobs.ents[mobSpawner->b.mobSpawnerProps.mobs.counter] = gm->mobs->ents[gm->mobs->counter - 1];
+    mobSpawner->b.mobSpawnerProps.numOfMobs++;
     mobSpawner->b.mobSpawnerProps.mobs.counter++;
+
+    reallocEntityList(&mobSpawner->b.mobSpawnerProps.mobs);
 
   }
 
   for(int i = 0; i < mobSpawner->b.mobSpawnerProps.mobs.counter; i++) {
-    if(mobSpawner->b.mobSpawnerProps.mobs.ents[i].isActive == false) {
-      mobSpawner->b.mobSpawnerProps.mobs.counter--;
+    if(mobSpawner->b.mobSpawnerProps.mobs.ents[i].isActive == false && mobSpawner->b.mobSpawnerProps.mobs.ents[i].m.isDefeated == false) {
+      mobSpawner->b.mobSpawnerProps.numOfMobs--;
+      mobSpawner->b.mobSpawnerProps.mobs.ents[i].m.isDefeated = true;
     }
   }
 
