@@ -64,6 +64,11 @@ enum {
   SLIME_FRAME = 3
 };
 
+enum projType {
+  BASIC_ATTACK,
+  PLAYER_ABILITY
+};
+
 struct Item {
   enum itemType it;
   Rectangle sourceRect;
@@ -87,6 +92,23 @@ struct itemList {
   struct Item * items;
 };
 
+struct abilities {
+  Texture2D UIBanner;
+  Texture2D textures[8];
+  Vector2 positions[8];
+  int timers[3];
+};
+
+struct projectiles {
+  enum projType pt;
+  Texture2D texture;
+  int speed;
+  Rectangle destRect;
+  Rectangle sourceRect;
+  bool isActive;
+  int frameSpeed;
+};
+
 struct Entity {
   enum entityType et;
   Rectangle sourceRect;
@@ -97,11 +119,18 @@ struct Entity {
  union {
    struct {
      int health;
+     int overHeal;
      int speed;
+     int coins;
      int boosts;
      int bombs;
+     int level;
+     int maxHealth;
+     int maxOverHeal;
+     int maxBoosts;
+     int maxBombs;
      enum playerType pt;
-
+     struct abilities abs;
    } p;
    struct {
      int health;
@@ -166,6 +195,7 @@ void itemPhysics(struct game *, struct Item *);
 void reallocItemList(struct itemList *);
 
 //Player Functions
+void drawAbilities(struct Entity *); 
 void playerPhysics(struct Entity *, struct entityList *);
 void playerControls(struct Entity *);
 
@@ -194,7 +224,7 @@ int main() {
 
   //all things player
   /* ---------------------------------------------------------- */
-  addGamePlayer(&mainGame, mainGame.players, PLAYER, RANGER, (Vector2){0, 16});
+  addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
   /* ---------------------------------------------------------- */
 
   //all things mobs
@@ -250,14 +280,13 @@ int main() {
 
     for(int i = 0; i < mainGame.items->counter; i++) {
       itemPhysics(&mainGame, &mainGame.items->items[i]);
-      
     }
     
     BeginDrawing();
     ClearBackground(BLACK);
 
     // DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
-    drawAbility(&mainGame.players->ents[0]);
+      drawAbilities(&mainGame.players->ents[0]);
     BeginMode2D(camera);
 
       drawGame(&mainGame);
@@ -307,34 +336,106 @@ void initEntity(struct Entity * ent, enum entityType et, Vector2 pos) {
 
 
 void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType pt, Vector2 pos) {
+  static int Scale = 3;
   ent->et = et;
   ent->isActive = true;
   ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
   ent->sourceRect = (Rectangle){pos.x, pos.y, 16, 16};
   ent->color = WHITE;
   ent->p.pt = pt;
+  ent->p.overHeal = 3;
   ent->p.bombs = 3;
   ent->p.boosts = 0;
+  ent->p.coins = 50;
+  ent->p.level = 1;
+  ent->p.maxBombs = 3;
+  ent->p.maxBoosts = 3;
+  ent->p.maxOverHeal = 5;
+  ent->p.abs.positions[0] = (Vector2){33 * Scale, 18 * Scale};
+  ent->p.abs.positions[1] = (Vector2){51 * Scale, 18 * Scale};
+  ent->p.abs.positions[2] = (Vector2){69 * Scale, 18 * Scale};
+  ent->p.abs.positions[3] = (Vector2){0 * Scale, 0 * Scale};
+  ent->p.abs.positions[4] = (Vector2){0 * Scale, 15 * Scale};
+  ent->p.abs.positions[5] = (Vector2){0 * Scale, 23 * Scale};
+  ent->p.abs.positions[6] = (Vector2){0 * Scale, 31 * Scale};
+  ent->p.abs.positions[7] = (Vector2){0 * Scale, 39 * Scale};
+  ent->p.abs.timers[0] = 0;
+  ent->p.abs.timers[1] = 0;
+  ent->p.abs.timers[2] = 0;
+  ent->p.abs.textures[3] = LoadTexture("./assets/healthBar.png");
+  ent->p.abs.textures[4] = LoadTexture("./assets/overHeal.png");
+  ent->p.abs.textures[5] = LoadTexture("./assets/speed.png");
+  ent->p.abs.textures[6] = LoadTexture("./assets/bomb.png");
+  ent->p.abs.textures[7] = LoadTexture("./assets/coin.png");
 
   switch(ent->p.pt) {
     case SWORDSMEN:
       ent->texture = LoadTexture("./assets/swordsmen.png");
+      ent->p.maxHealth = 7;
       ent->p.health = 5;
       ent->p.speed = 3;
+      ent->p.abs.UIBanner = LoadTexture("./assets/swordsmenUI.png");
+      ent->p.abs.textures[0] = LoadTexture("./assets/airSlash.png");
+      ent->p.abs.textures[1] = LoadTexture("./assets/risingSlash.png");
+      ent->p.abs.textures[2] = LoadTexture("./assets/parry.png");
       break;
     case RANGER:
       ent->texture = LoadTexture("./assets/ranger.png");
+      ent->p.maxHealth = 5;
       ent->p.health = 3;
       ent->p.speed = 5;
+      ent->p.abs.UIBanner = LoadTexture("./assets/rangerUI.png");
+      ent->p.abs.textures[0] = LoadTexture("./assets/superchargedshot.png");
+      ent->p.abs.textures[1] = LoadTexture("./assets/backroll.png");
+      ent->p.abs.textures[2] = LoadTexture("./assets/snaretrap.png");
       break;
     case MAGE:
       ent->texture = LoadTexture("./assets/mage.png");
+      ent->p.maxHealth = 6;
       ent->p.health = 4;
       ent->p.speed = 4;
+      ent->p.abs.UIBanner = LoadTexture("./assets/mageUI.png");
+      ent->p.abs.textures[0] = LoadTexture("./assets/galvanicwall.png");
+      ent->p.abs.textures[1] = LoadTexture("./assets/bounceforce.png");
+      ent->p.abs.textures[2] = LoadTexture("./assets/bubbleshield.png");
       break;
   }
+
 }
 
+void drawAbilities(struct Entity * ent) {
+
+  DrawTextureEx(ent->p.abs.UIBanner, (Vector2){0,0}, 0, 3, WHITE);
+  for(int i = 0; i < ent->p.health; i++) {
+    DrawTextureEx(ent->p.abs.textures[3], (Vector2){ent->p.abs.positions[3].x + (i * 32), ent->p.abs.positions[3].y}, 0, 3, WHITE);
+  }
+  for(int i = 0; i < ent->p.overHeal; i++) {
+    DrawTextureEx(ent->p.abs.textures[4], (Vector2){ent->p.abs.positions[4].x + (i * 16), ent->p.abs.positions[4].y}, 0, 3, WHITE);
+  }
+  DrawTextureEx(ent->p.abs.textures[0], ent->p.abs.positions[0], 0, 3, WHITE);
+  if(ent->p.abs.timers[0] > 0) {
+    DrawText(TextFormat("%d", ent->p.abs.timers[0]), ent->p.abs.positions[0].x, ent->p.abs.positions[0].y, 12, WHITE);
+  }
+  DrawTextureEx(ent->p.abs.textures[1], ent->p.abs.positions[1], 0, 3, WHITE);
+  if(ent->p.abs.timers[1] > 0) {
+    DrawText(TextFormat("%d", ent->p.abs.timers[1]), ent->p.abs.positions[1].x, ent->p.abs.positions[1].y, 12, WHITE);
+  }
+  DrawTextureEx(ent->p.abs.textures[2], ent->p.abs.positions[2], 0, 3, WHITE);
+  if(ent->p.abs.timers[2] > 0) {
+    DrawText(TextFormat("%d", ent->p.abs.timers[2]), ent->p.abs.positions[2].x, ent->p.abs.positions[2].y, 12, WHITE);
+  }
+  DrawTextureEx(ent->p.abs.textures[5], ent->p.abs.positions[5], 0, 3, WHITE);
+  for(int i = 0; i < ent->p.boosts; i++) {
+    DrawTextureEx(ent->p.abs.textures[5], (Vector2){ent->p.abs.positions[5].x + (i * 24), ent->p.abs.positions[5].y}, 0, 3, WHITE);
+  }
+  DrawTextureEx(ent->p.abs.textures[6], ent->p.abs.positions[6], 0, 3, WHITE);
+  for(int i = 0; i < ent->p.bombs; i++) {
+    DrawTextureEx(ent->p.abs.textures[6], (Vector2){ent->p.abs.positions[6].x + (i * 24), ent->p.abs.positions[6].y}, 0, 3, WHITE);
+  }
+  DrawTextureEx(ent->p.abs.textures[7], ent->p.abs.positions[7], 0, 3, WHITE);
+  DrawText(TextFormat("%d", ent->p.coins), ent->p.abs.positions[7].x + 24, ent->p.abs.positions[7].y + 16, 12, WHITE);
+
+}
 
 void initEntityMob(struct Entity * ent, enum entityType et, enum mobType mt, Vector2 pos) {
   ent->et = et;
@@ -606,7 +707,6 @@ void drawGame(struct game * gm) {
   
   for(int i = 0; i < gm->items->counter; i++) {
     drawItem(&gm->items->items[i]);
-    DrawText(TextFormat("%d", gm->items->items[i].quantity), gm->items->items[i].destRect.x, gm->items->items[i].destRect.y - 8, 4, WHITE);
   }
 }
 
@@ -642,7 +742,7 @@ void initItem(struct Item * item, enum itemType it, Vector2 pos) {
       item->sourceRect = (Rectangle){0, 0, 8, 8};
       item->texture = LoadTexture("./assets/heart.png");
       item->color = WHITE;
-      item->quantity = 3;
+      item->quantity = 1;
       break;
     case COIN:
       item->destRect = (Rectangle){pos.x, pos.y, 8, 8};
@@ -672,29 +772,65 @@ void drawItem(struct Item * item) {
 
   if(item->isActive) {
     DrawTexturePro(item->texture, item->sourceRect, item->destRect, (Vector2){0.0, 0.0}, 0.0f, item->color);
-    // if(ent->et == BLOCK)
-    //   DrawText(TextFormat("%d", ent->b.blockWeight), ent->destRect.x, ent->destRect.y, 8, WHITE); 
+    if(item->quantity > 1)
+      DrawText(TextFormat("%d", item->quantity), item->destRect.x, item->destRect.y - 8, 4, WHITE);
   }
 }
 
 
 void itemPhysics(struct game * gm, struct Item * it) {
 
-  float fallSpeed = 0.1f;
-  if(it->gravCounter > 15) 
-    it->destRect.y += fallSpeed;
-  else
-    it->destRect.y -= fallSpeed;
-
-  for(int i = 0; i < gm->blocks->counter; i++) {
-    if(CheckCollisionRecs(it->destRect, gm->blocks->ents[i].destRect)) {
+  if(it->isActive == true) {
+    float fallSpeed = 0.1f;
+    if(it->gravCounter > 15) 
+      it->destRect.y += fallSpeed;
+    else
       it->destRect.y -= fallSpeed;
-      it->gravCounter = 0;
-    }
-  }
 
-  it->gravCounter++;
+    for(int i = 0; i < gm->blocks->counter; i++) {
+      if(CheckCollisionRecs(it->destRect, gm->blocks->ents[i].destRect)) {
+        it->destRect.y -= fallSpeed;
+        it->gravCounter = 0;
+      }
+    }
+
+    for(int i = 0; i < gm->players->counter; i++) {
+      if(CheckCollisionRecs(it->destRect, gm->players->ents[i].destRect)) {
+        switch(it->it) {
+          case NAI:
+            break;
+          case COIN:
+              gm->players->ents[i].p.coins += it->quantity; 
+              it->isActive = false;
+            break;
+          case HEALTH:
+            if(gm->players->ents[i].p.health < gm->players->ents[i].p.maxHealth) {
+              gm->players->ents[i].p.health += it->quantity; 
+              it->isActive = false;
+            } else if (gm->players->ents[i].p.overHeal < gm->players->ents[i].p.maxOverHeal) {
+              gm->players->ents[i].p.overHeal += it->quantity; 
+              it->isActive = false;
+            }
+            break;
+          case SPEED:
+            if(gm->players->ents[i].p.boosts < gm->players->ents[i].p.maxBoosts) {
+              gm->players->ents[i].p.boosts += it->quantity; 
+              it->isActive = false;
+            }
+            break;
+          case BOMB:
+            if(gm->players->ents[i].p.bombs < gm->players->ents[i].p.maxBombs) {
+              gm->players->ents[i].p.bombs += it->quantity; 
+              it->isActive = false;
+            }
+            break;
+        }
+      }
+    }
+
+    it->gravCounter++;
   
+  }
 }
 
 void reallocEntityList(struct entityList * entList) {
@@ -715,6 +851,8 @@ void reallocItemList(struct itemList * itemList) {
 
 void playerPhysics(struct Entity * player, struct entityList * blocks) {
 
+    static int timerCounter = 0;
+
     static int fallSpeed = 1;
     static int fallCounter = 0;
     player->destRect.y += fallSpeed;
@@ -732,6 +870,16 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
       fallCounter++;
     }
 
+    for(int i = 0; i < 3; i++) {
+      if(player->p.abs.timers[i] > 0) {
+        if(timerCounter % 60 == 0) {
+          player->p.abs.timers[i]--;
+          timerCounter = 0;
+        }
+      }
+    }
+
+    timerCounter++;
 }
 
 void playerControls(struct Entity * player) {
@@ -742,6 +890,18 @@ void playerControls(struct Entity * player) {
   
     if(IsKeyDown(KEY_A)) {
       player->destRect.x -= 2;
+    }
+
+    if(IsKeyPressed(KEY_H) && player->p.abs.timers[0] <= 0) {
+      player->p.abs.timers[0] = 5;
+    }
+
+    if(IsKeyPressed(KEY_J) && player->p.abs.timers[0] <= 0) {
+      player->p.abs.timers[1] = 8;
+    }
+
+    if(IsKeyPressed(KEY_K) && player->p.abs.timers[0] <= 0) {
+      player->p.abs.timers[2] = 12;
     }
 }
 
