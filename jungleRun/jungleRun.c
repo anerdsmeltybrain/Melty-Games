@@ -66,7 +66,8 @@ enum {
 
 enum projType {
   BASIC_ATTACK,
-  PLAYER_ABILITY
+  PLAYER_ABILITY,
+  USE_ITEM
 };
 
 struct Item {
@@ -94,19 +95,32 @@ struct itemList {
 
 struct abilities {
   Texture2D UIBanner;
+  enum playerAbilities pa[3];
   Texture2D textures[8];
   Vector2 positions[8];
   int timers[3];
 };
 
-struct projectiles {
+struct projectile {
   enum projType pt;
-  Texture2D texture;
+  enum blockCheck dir;
   int speed;
+  int damage;
+  int frameSpeed;
+  Texture2D texture;
   Rectangle destRect;
   Rectangle sourceRect;
   bool isActive;
-  int frameSpeed;
+  union {
+    enum itemType it;
+    enum playerAbilities pa;
+  };
+};
+
+struct projList {
+  int capacity;
+  int counter;
+  struct projectile * projectiles;
 };
 
 struct Entity {
@@ -130,7 +144,9 @@ struct Entity {
      int maxBoosts;
      int maxBombs;
      enum playerType pt;
+     enum blockCheck dir;
      struct abilities abs;
+     struct projList projectiles;
    } p;
    struct {
      int health;
@@ -196,6 +212,15 @@ void reallocItemList(struct itemList *);
 
 //Player Functions
 void drawAbilities(struct Entity *); 
+void initProjectileBasic(struct projectile *, struct Entity *, Vector2);
+void initProjectileAbility(struct projectile *, struct Entity *, enum playerAbilities, Vector2);
+void initProjectileItem(struct projectile *, struct Entity *, enum itemType, Vector2);
+void addProjectileListBasic(struct Entity *, Vector2);
+void addProjectileListAbility(struct Entity *, struct projectile *, enum playerAbilities, Vector2);
+void addProjectileListItem(struct Entity *, struct projectile *, enum itemType, Vector2);
+void drawProjectile(struct projectile *);
+void reallocProjList(struct projList *); 
+void projectilePhysics(struct game *);
 void playerPhysics(struct Entity *, struct entityList *);
 void playerControls(struct Entity *);
 
@@ -281,6 +306,8 @@ int main() {
     for(int i = 0; i < mainGame.items->counter; i++) {
       itemPhysics(&mainGame, &mainGame.items->items[i]);
     }
+
+    projectilePhysics(&mainGame);
     
     BeginDrawing();
     ClearBackground(BLACK);
@@ -343,6 +370,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   ent->sourceRect = (Rectangle){pos.x, pos.y, 16, 16};
   ent->color = WHITE;
   ent->p.pt = pt;
+  ent->p.dir = RIGHT;
   ent->p.overHeal = 3;
   ent->p.bombs = 3;
   ent->p.boosts = 0;
@@ -368,6 +396,10 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   ent->p.abs.textures[6] = LoadTexture("./assets/bomb.png");
   ent->p.abs.textures[7] = LoadTexture("./assets/coin.png");
 
+  ent->p.projectiles.capacity = 1;
+  ent->p.projectiles.counter = 0;
+  ent->p.projectiles.projectiles = malloc(ent->p.projectiles.capacity * sizeof ( struct projectile ));
+
   switch(ent->p.pt) {
     case SWORDSMEN:
       ent->texture = LoadTexture("./assets/swordsmen.png");
@@ -375,6 +407,9 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->p.health = 5;
       ent->p.speed = 3;
       ent->p.abs.UIBanner = LoadTexture("./assets/swordsmenUI.png");
+      ent->p.abs.pa[0] = AIRSLASH;
+      ent->p.abs.pa[1] = RISINGSLASH;
+      ent->p.abs.pa[2] = PARRY;
       ent->p.abs.textures[0] = LoadTexture("./assets/airSlash.png");
       ent->p.abs.textures[1] = LoadTexture("./assets/risingSlash.png");
       ent->p.abs.textures[2] = LoadTexture("./assets/parry.png");
@@ -385,6 +420,9 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->p.health = 3;
       ent->p.speed = 5;
       ent->p.abs.UIBanner = LoadTexture("./assets/rangerUI.png");
+      ent->p.abs.pa[0] = SUPERCHARGEDSHOT;
+      ent->p.abs.pa[1] = BACKROLL;
+      ent->p.abs.pa[2] = SNARETRAP;
       ent->p.abs.textures[0] = LoadTexture("./assets/superchargedshot.png");
       ent->p.abs.textures[1] = LoadTexture("./assets/backroll.png");
       ent->p.abs.textures[2] = LoadTexture("./assets/snaretrap.png");
@@ -395,6 +433,9 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->p.health = 4;
       ent->p.speed = 4;
       ent->p.abs.UIBanner = LoadTexture("./assets/mageUI.png");
+      ent->p.abs.pa[0] = GALVANICWALL;
+      ent->p.abs.pa[1] = BOUNCEFORCE;
+      ent->p.abs.pa[2] = BUBBLESHIELD;
       ent->p.abs.textures[0] = LoadTexture("./assets/galvanicwall.png");
       ent->p.abs.textures[1] = LoadTexture("./assets/bounceforce.png");
       ent->p.abs.textures[2] = LoadTexture("./assets/bubbleshield.png");
@@ -436,6 +477,90 @@ void drawAbilities(struct Entity * ent) {
   DrawText(TextFormat("%d", ent->p.coins), ent->p.abs.positions[7].x + 24, ent->p.abs.positions[7].y + 16, 12, WHITE);
 
 }
+
+void initProjectileBasic(struct projectile * proj, struct Entity * ent, Vector2 pos) {
+  proj->pt = BASIC_ATTACK;
+  proj->destRect = (Rectangle){pos.x, pos.y, 6, 13};
+  proj->sourceRect = (Rectangle){0, 0, 6, 13};
+  proj->isActive = true;
+
+  switch(ent->p.pt) {
+    case SWORDSMEN:
+      proj->damage = ent->p.level * 2;
+      proj->speed = 1;
+      proj->frameSpeed = 5;
+      proj->texture = LoadTexture("./assets/swordsmenBasicAttack.png");
+      proj->dir = ent->p.dir;
+      break;
+    case RANGER:
+      break;
+    case MAGE:
+      break;
+  }
+
+  if(proj->dir == LEFT) {
+    proj->speed *= -1;
+    proj->sourceRect.width *= -1;
+  }
+  
+}
+
+void initProjectileAbility(struct projectile *, struct Entity *, enum playerAbilities, Vector2) {
+  
+}
+
+void initProjectileItem(struct projectile *, struct Entity *, enum itemType, Vector2) {
+  
+}
+
+void addProjectileListBasic(struct Entity * ent, Vector2 pos) {
+  
+  if (ent->p.projectiles.counter == 1) {
+    // ent->p.projectiles->projectiles->ents = realloc(ent->p.projectiles->projectiles->ents, sizeof (struct Entity));
+    initProjectileBasic(&ent->p.projectiles.projectiles[ent->p.projectiles.counter], ent, pos);
+    ent->p.projectiles.counter++;
+  } else {
+    ent->p.projectiles.capacity++;
+    // ent->p.projectiles.projectiles = realloc(ent->p.projectiles.projectiles, ent->p.projectiles.capacity * sizeof (struct projectile));
+    reallocProjList(&ent->p.projectiles);
+    initProjectileBasic(&ent->p.projectiles.projectiles[ent->p.projectiles.counter], ent, pos);
+    ent->p.projectiles.counter++;
+  }
+}
+
+void addProjectileListAbility(struct Entity *, struct projectile *, enum playerAbilities, Vector2) {
+  
+}
+
+void addProjectileListItem(struct Entity * ent, struct projectile * proj, enum itemType it, Vector2 pos) {
+
+}
+
+void drawProjectile(struct projectile * proj) {
+  if(proj->isActive == true) {
+    DrawTexturePro(proj->texture, proj->sourceRect, proj->destRect, (Vector2){0,0}, 0.0f, WHITE);
+  }
+}
+
+void projectilePhysics(struct game * gm) {
+
+  for(int i = 0; i < gm->players->counter; i++) {
+    for(int j = 0; j < gm->players->ents[i].p.projectiles.counter; j++) {
+      gm->players->ents[i].p.projectiles.projectiles[j].destRect.x += gm->players->ents[i].p.projectiles.projectiles[j].speed;
+      for(int k = 0; k < gm->blocks->counter; k++) {
+          if(gm->blocks->ents[k].b.bt == MOBSPAWNER) {
+            for(int h = 0; h < gm->blocks->ents[k].b.mobSpawnerProps.mobs.counter; h++) {
+              if(CheckCollisionRecs(gm->players->ents[i].p.projectiles.projectiles[j].destRect, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect))
+                gm->players->ents[i].p.projectiles.projectiles[j].isActive = false;
+            }
+              
+        }
+      }
+    }
+  }
+    
+}
+
 
 void initEntityMob(struct Entity * ent, enum entityType et, enum mobType mt, Vector2 pos) {
   ent->et = et;
@@ -703,6 +828,9 @@ void drawGame(struct game * gm) {
 
   for(int i = 0; i < gm->players->counter; i++) {
     drawEntity(&gm->players->ents[i]);
+    for(int j = 0; j < gm->players->ents[i].p.projectiles.counter; j++) {
+      drawProjectile(&gm->players->ents[i].p.projectiles.projectiles[j]);
+    }
   }
   
   for(int i = 0; i < gm->items->counter; i++) {
@@ -846,7 +974,15 @@ void reallocItemList(struct itemList * itemList) {
     itemList->capacity *= 2;
   }
 
-  itemList->items = realloc(itemList->items, itemList->capacity * sizeof (struct Entity));
+  itemList->items = realloc(itemList->items, itemList->capacity * sizeof (struct Item));
+}
+
+void reallocProjList(struct projList * projList) {
+  if(projList->counter >= projList->capacity / 2) {
+    projList->capacity *= 2;
+  }
+
+  projList->projectiles = realloc(projList->projectiles, projList->capacity * sizeof (struct projectile));
 }
 
 void playerPhysics(struct Entity * player, struct entityList * blocks) {
@@ -886,21 +1022,33 @@ void playerControls(struct Entity * player) {
 
     if(IsKeyDown(KEY_D)) {
       player->destRect.x += 2;
+      if(player->p.dir == LEFT) {
+        player->p.dir = RIGHT;
+        player->sourceRect.width *= -1;
+      }
     }
   
     if(IsKeyDown(KEY_A)) {
       player->destRect.x -= 2;
+      if(player->p.dir == RIGHT) {
+        player->p.dir = LEFT;
+        player->sourceRect.width *= -1;
+      }
     }
 
-    if(IsKeyPressed(KEY_H) && player->p.abs.timers[0] <= 0) {
-      player->p.abs.timers[0] = 5;
+    if(IsKeyPressed(KEY_H)) {
+      addProjectileListBasic(player, (Vector2){player->destRect.x, player->destRect.y});
     }
 
     if(IsKeyPressed(KEY_J) && player->p.abs.timers[0] <= 0) {
-      player->p.abs.timers[1] = 8;
+      player->p.abs.timers[0] = 5;
     }
 
     if(IsKeyPressed(KEY_K) && player->p.abs.timers[0] <= 0) {
+      player->p.abs.timers[1] = 8;
+    }
+
+    if(IsKeyPressed(KEY_L) && player->p.abs.timers[0] <= 0) {
       player->p.abs.timers[2] = 12;
     }
 }
