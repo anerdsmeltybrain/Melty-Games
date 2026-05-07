@@ -13,6 +13,13 @@ enum playerType {
   MAGE
 };
 
+enum playerState {
+  IDLE,
+  MOVING,
+  ATTACKING,
+  JUMPING
+};
+
 enum playerAbilities {
   NOABS,
   //SWORDSMEN ABILTITIES
@@ -61,7 +68,7 @@ enum blockCheck {
 };
 
 enum {
-  SLIME_FRAME = 3
+  SLIME_FRAME = 3,
 };
 
 enum projType {
@@ -144,6 +151,7 @@ struct Entity {
      int maxBoosts;
      int maxBombs;
      enum playerType pt;
+     enum playerState ps;
      enum blockCheck dir;
      struct abilities abs;
      struct projList projectiles;
@@ -223,6 +231,7 @@ void reallocProjList(struct projList *);
 void projectilePhysics(struct game *);
 void playerPhysics(struct Entity *, struct entityList *);
 void playerControls(struct Entity *);
+void playerAnimations(struct Entity *);
 
 //Mob Functions
 void mobPhysics(struct game *, struct Entity *, struct entityList *); 
@@ -284,6 +293,7 @@ int main() {
     camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
     playerPhysics(&mainGame.players->ents[0], mainGame.blocks);
     playerControls(&mainGame.players->ents[0]);
+    playerAnimations(&mainGame.players->ents[0]);
 
     for(int i = 0; i < mainGame.blocks->counter; i++) {
       if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].b.mobSpawnerProps.mt == SLIME) {
@@ -370,6 +380,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   ent->sourceRect = (Rectangle){pos.x, pos.y, 16, 16};
   ent->color = WHITE;
   ent->p.pt = pt;
+  ent->p.ps = IDLE;
   ent->p.dir = RIGHT;
   ent->p.overHeal = 3;
   ent->p.bombs = 3;
@@ -405,7 +416,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/swordsmen.png");
       ent->p.maxHealth = 7;
       ent->p.health = 5;
-      ent->p.speed = 3;
+      ent->p.speed = 2;
       ent->p.abs.UIBanner = LoadTexture("./assets/swordsmenUI.png");
       ent->p.abs.pa[0] = AIRSLASH;
       ent->p.abs.pa[1] = RISINGSLASH;
@@ -418,7 +429,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/ranger.png");
       ent->p.maxHealth = 5;
       ent->p.health = 3;
-      ent->p.speed = 5;
+      ent->p.speed = 4;
       ent->p.abs.UIBanner = LoadTexture("./assets/rangerUI.png");
       ent->p.abs.pa[0] = SUPERCHARGEDSHOT;
       ent->p.abs.pa[1] = BACKROLL;
@@ -431,7 +442,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/mage.png");
       ent->p.maxHealth = 6;
       ent->p.health = 4;
-      ent->p.speed = 4;
+      ent->p.speed = 3;
       ent->p.abs.UIBanner = LoadTexture("./assets/mageUI.png");
       ent->p.abs.pa[0] = GALVANICWALL;
       ent->p.abs.pa[1] = BOUNCEFORCE;
@@ -480,12 +491,12 @@ void drawAbilities(struct Entity * ent) {
 
 void initProjectileBasic(struct projectile * proj, struct Entity * ent, Vector2 pos) {
   proj->pt = BASIC_ATTACK;
-  proj->destRect = (Rectangle){pos.x, pos.y, 6, 13};
-  proj->sourceRect = (Rectangle){0, 0, 6, 13};
   proj->isActive = true;
 
   switch(ent->p.pt) {
     case SWORDSMEN:
+      proj->destRect = (Rectangle){pos.x, pos.y, 6, 13};
+      proj->sourceRect = (Rectangle){0, 0, 6, 13};
       proj->damage = ent->p.level * 2;
       proj->speed = 1;
       proj->frameSpeed = 5;
@@ -493,8 +504,22 @@ void initProjectileBasic(struct projectile * proj, struct Entity * ent, Vector2 
       proj->dir = ent->p.dir;
       break;
     case RANGER:
+      proj->destRect = (Rectangle){pos.x, pos.y, 10, 7};
+      proj->sourceRect = (Rectangle){0, 0, 10, 7};
+      proj->damage = ent->p.level * 2;
+      proj->speed = 1;
+      proj->frameSpeed = 5;
+      proj->texture = LoadTexture("./assets/rangerBasicAttack.png");
+      proj->dir = ent->p.dir;
       break;
     case MAGE:
+      proj->destRect = (Rectangle){pos.x, pos.y, 8, 8};
+      proj->sourceRect = (Rectangle){0, 0, 8, 8};
+      proj->damage = ent->p.level * 2;
+      proj->speed = 1;
+      proj->frameSpeed = 5;
+      proj->texture = LoadTexture("./assets/mageBasicAttack.png");
+      proj->dir = ent->p.dir;
       break;
   }
 
@@ -550,8 +575,10 @@ void projectilePhysics(struct game * gm) {
       for(int k = 0; k < gm->blocks->counter; k++) {
           if(gm->blocks->ents[k].b.bt == MOBSPAWNER) {
             for(int h = 0; h < gm->blocks->ents[k].b.mobSpawnerProps.mobs.counter; h++) {
-              if(CheckCollisionRecs(gm->players->ents[i].p.projectiles.projectiles[j].destRect, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect))
-                gm->players->ents[i].p.projectiles.projectiles[j].isActive = false;
+              if(CheckCollisionRecs(gm->players->ents[i].p.projectiles.projectiles[j].destRect, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect)) {
+                if(gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].isActive == true)
+                  gm->players->ents[i].p.projectiles.projectiles[j].isActive = false;
+              }
             }
               
         }
@@ -1018,22 +1045,49 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
     timerCounter++;
 }
 
+void playerAnimations(struct Entity * player) {
+  static int i = 0;
+  switch(player->p.ps) {
+    case IDLE:
+      player->sourceRect.y = 0;
+      if(i % 8 == 0)
+        player->sourceRect.x += 16;
+      break;
+    case MOVING:
+      player->sourceRect.y = 16;
+      if(i % 8 == 0)
+        player->sourceRect.x += 16;
+      break;
+    case ATTACKING:
+      break;
+    case JUMPING:
+      break;
+  }
+  i++;
+}
+
 void playerControls(struct Entity * player) {
 
     if(IsKeyDown(KEY_D)) {
-      player->destRect.x += 2;
+      player->p.ps = MOVING;
+      player->destRect.x += player->p.speed;
       if(player->p.dir == LEFT) {
         player->p.dir = RIGHT;
         player->sourceRect.width *= -1;
       }
+    } else {
+      player->p.ps = IDLE;
     }
   
     if(IsKeyDown(KEY_A)) {
-      player->destRect.x -= 2;
+      player->p.ps = MOVING;
+      player->destRect.x -= player->p.speed;
       if(player->p.dir == RIGHT) {
         player->p.dir = LEFT;
         player->sourceRect.width *= -1;
       }
+    } else {
+      player->p.ps = IDLE;
     }
 
     if(IsKeyPressed(KEY_H)) {
