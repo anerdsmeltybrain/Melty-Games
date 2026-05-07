@@ -576,8 +576,10 @@ void projectilePhysics(struct game * gm) {
           if(gm->blocks->ents[k].b.bt == MOBSPAWNER) {
             for(int h = 0; h < gm->blocks->ents[k].b.mobSpawnerProps.mobs.counter; h++) {
               if(CheckCollisionRecs(gm->players->ents[i].p.projectiles.projectiles[j].destRect, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect)) {
-                if(gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].isActive == true)
+                if((gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].isActive == true) && (gm->players->ents[i].p.projectiles.projectiles[j].isActive == true)) {
+                  gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].m.health -= gm->players->ents[i].p.projectiles.projectiles[j].damage;
                   gm->players->ents[i].p.projectiles.projectiles[j].isActive = false;
+                }
               }
             }
               
@@ -1056,7 +1058,11 @@ void playerAnimations(struct Entity * player) {
     case MOVING:
       player->sourceRect.y = 16;
       if(i % 8 == 0)
-        player->sourceRect.x += 16;
+        if(player->p.dir == RIGHT) {
+          player->sourceRect.x += 16;
+        } else if (player->p.dir == LEFT) {
+          player->sourceRect.x += 16;
+        }
       break;
     case ATTACKING:
       break;
@@ -1075,11 +1081,7 @@ void playerControls(struct Entity * player) {
         player->p.dir = RIGHT;
         player->sourceRect.width *= -1;
       }
-    } else {
-      player->p.ps = IDLE;
-    }
-  
-    if(IsKeyDown(KEY_A)) {
+    } else if(IsKeyDown(KEY_A)) {
       player->p.ps = MOVING;
       player->destRect.x -= player->p.speed;
       if(player->p.dir == RIGHT) {
@@ -1090,7 +1092,7 @@ void playerControls(struct Entity * player) {
       player->p.ps = IDLE;
     }
 
-    if(IsKeyPressed(KEY_H)) {
+    if(IsKeyPressed(KEY_H) && player->p.ps == IDLE) {
       addProjectileListBasic(player, (Vector2){player->destRect.x, player->destRect.y});
     }
 
