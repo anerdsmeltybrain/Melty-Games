@@ -16,7 +16,7 @@ enum playerType {
 enum playerState {
   IDLE,
   MOVING,
-  ATTACKING,
+  BOOSTING,
   JUMPING
 };
 
@@ -49,7 +49,8 @@ enum blockType {
   GRASS,
   DIRT,
   LEAVES,
-  TRUNK 
+  TRUNK,
+  LADDER
 };
 
 enum mobType {
@@ -141,6 +142,7 @@ struct Entity {
    struct {
      int health;
      int overHeal;
+     int damageBuffer;
      int speed;
      int coins;
      int boosts;
@@ -153,6 +155,7 @@ struct Entity {
      enum playerType pt;
      enum playerState ps;
      enum blockCheck dir;
+     bool damageBuff;
      struct abilities abs;
      struct projList projectiles;
    } p;
@@ -179,6 +182,22 @@ struct Entity {
      } mobSpawnerProps;
    } b;
  }; 
+};
+
+struct chunk {
+  int width;
+  int height;
+  Vector2 pos;
+  bool hasSpawner;
+  bool hasLadder;
+  bool willExtend;
+};
+
+struct level {
+ int depth;
+ struct chunk * chunks;
+ Vector2 pos;
+ 
 };
 
 struct game {
@@ -211,6 +230,12 @@ void addGameBlock(struct game *, struct entityList *, enum entityType, enum bloc
 void addGameBlockSpawner(struct game *, struct entityList *, enum entityType, enum blockType, enum mobType, Vector2);
 void drawGame(struct game *);
 void gameMobPlayerInter(struct game *);
+
+//Level Generation Functions
+// void addChunk(struct game *, int, int, Vector2);
+void addChunk(struct game *, struct chunk *);
+void initChunk(struct chunk *, Vector2);
+void addChunkSpawner(struct game *, struct chunk *); 
 
 //Item List Function
 void initItem(struct Item *, enum itemType, Vector2); 
@@ -258,7 +283,7 @@ int main() {
 
   //all things player
   /* ---------------------------------------------------------- */
-  addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
+  addGamePlayer(&mainGame, mainGame.players, PLAYER, RANGER, (Vector2){0, 16});
   /* ---------------------------------------------------------- */
 
   //all things mobs
@@ -268,18 +293,33 @@ int main() {
 
   // all things blocks
   /* ---------------------------------------------------------- */
-  for(int i = 0; i < 25; i++) {
-    for(int j = 0; j < 4; j++) {
-      addGameBlock(&mainGame, mainGame.blocks, BLOCK, GRASS, (Vector2){i * 16, j * 16 + 48});
-    }
-  }
+  // for(int i = 0; i < 20; i++) {
+  //   for(int j = 0; j < 2; j++) {
+  //     addGameBlock(&mainGame, mainGame.blocks, BLOCK, GRASS, (Vector2){i * 16, j * 16 + 48});
+  //   }
+  // }
 
-  for(int i = 0; i < mainGame.blocks->counter; i++) {
-    blockWeightChecker(&mainGame.blocks->ents[i], mainGame.blocks->ents, mainGame.blocks->counter);
-    blockSourceDestChecker(&mainGame.blocks->ents[i]);
-  }
+  struct chunk chunky;
+  struct chunk spunky;
+  initChunk(&chunky, (Vector2){0, 48});
+  initChunk(&spunky, (Vector2){320, 48});
+
+  addChunk(&mainGame, &chunky);
+  addChunk(&mainGame, &spunky);
+
+  // addChunkSpawner(&mainGame, &chunky);
+  // addChunkSpawner(&mainGame, &spunky);
+
+  // for(int i = 0; i < mainGame.blocks->counter; i++) {
+  //   if(mainGame.blocks->ents[i].b.bt != MOBSPAWNER) {
+  //     blockWeightChecker(&mainGame.blocks->ents[i], mainGame.blocks->ents, mainGame.blocks->counter);
+  //     blockSourceDestChecker(&mainGame.blocks->ents[i]);
+  //   }
+  // }
 
   addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, SLIME, (Vector2){32, 32});
+  addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOBLIN, (Vector2){64, 32});
+  addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOLEM, (Vector2){96, 32});
   /* ---------------------------------------------------------- */
   
   //camera functionalities
@@ -296,15 +336,16 @@ int main() {
     playerAnimations(&mainGame.players->ents[0]);
 
     for(int i = 0; i < mainGame.blocks->counter; i++) {
-      if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].b.mobSpawnerProps.mt == SLIME) {
-        mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, SLIME, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
+      if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER) {
+        mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
         for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
           mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
           mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
         }
       }
 
-    }
+      }
+    
 
     for(int i = 0; i < mainGame.mobs->counter; i++) {
       mobPhysics(&mainGame, &mainGame.mobs->ents[i], mainGame.blocks);
@@ -323,10 +364,10 @@ int main() {
     ClearBackground(BLACK);
 
     // DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
-      drawAbilities(&mainGame.players->ents[0]);
+    drawAbilities(&mainGame.players->ents[0]);
     BeginMode2D(camera);
 
-      drawGame(&mainGame);
+    drawGame(&mainGame);
 
     EndMode2D();
 
@@ -337,6 +378,34 @@ int main() {
   return 0;
 }
 
+void initChunk(struct chunk * ch, Vector2 pos) {
+  ch->height = 2;
+  ch->width = GetRandomValue(5, 25);
+  ch->hasLadder = GetRandomValue(0, 1);
+  ch->hasSpawner = GetRandomValue(0, 1);
+  ch->pos = pos;
+}
+
+void addChunk(struct game * gm, struct chunk * ch) {
+  for(int i = 0; i < ch->width; i++) {
+    for(int j = 0; j < ch->height; j++) {
+      addGameBlock(gm, gm->blocks, BLOCK, GRASS, (Vector2){ch->pos.x + (i * 16), ch->pos.y + (j * 16)});
+    }
+  }
+
+  for(int i = 0; i < gm->blocks->counter; i++) {
+    if(gm->blocks->ents[i].b.bt != MOBSPAWNER) {
+      blockWeightChecker(&gm->blocks->ents[i], gm->blocks->ents, gm->blocks->counter);
+      blockSourceDestChecker(&gm->blocks->ents[i]);
+    }
+  }
+}
+
+void addChunkSpawner(struct game* gm, struct chunk * ch) {
+  if(ch->hasSpawner == true) {
+    addGameBlockSpawner(gm, gm->blocks, BLOCK, MOBSPAWNER, GetRandomValue(0, 3), (Vector2){ch->pos.x + (GetRandomValue(16, ch->width * 16)), ch->pos.y - 16});
+  }
+}
 
 void initEntity(struct Entity * ent, enum entityType et, Vector2 pos) {
 
@@ -382,6 +451,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   ent->p.pt = pt;
   ent->p.ps = IDLE;
   ent->p.dir = RIGHT;
+  ent->p.damageBuffer = 0;
   ent->p.overHeal = 3;
   ent->p.bombs = 3;
   ent->p.boosts = 0;
@@ -429,7 +499,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/ranger.png");
       ent->p.maxHealth = 5;
       ent->p.health = 3;
-      ent->p.speed = 4;
+      ent->p.speed = 2;
       ent->p.abs.UIBanner = LoadTexture("./assets/rangerUI.png");
       ent->p.abs.pa[0] = SUPERCHARGEDSHOT;
       ent->p.abs.pa[1] = BACKROLL;
@@ -442,7 +512,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/mage.png");
       ent->p.maxHealth = 6;
       ent->p.health = 4;
-      ent->p.speed = 3;
+      ent->p.speed = 2;
       ent->p.abs.UIBanner = LoadTexture("./assets/mageUI.png");
       ent->p.abs.pa[0] = GALVANICWALL;
       ent->p.abs.pa[1] = BOUNCEFORCE;
@@ -457,30 +527,32 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
 
 void drawAbilities(struct Entity * ent) {
 
-  DrawTextureEx(ent->p.abs.UIBanner, (Vector2){0,0}, 0, 3, WHITE);
+  // DrawTextureEx(ent->p.abs.UIBanner, (Vector2){0,0}, 0, 3, WHITE);
   for(int i = 0; i < ent->p.health; i++) {
     DrawTextureEx(ent->p.abs.textures[3], (Vector2){ent->p.abs.positions[3].x + (i * 32), ent->p.abs.positions[3].y}, 0, 3, WHITE);
   }
   for(int i = 0; i < ent->p.overHeal; i++) {
     DrawTextureEx(ent->p.abs.textures[4], (Vector2){ent->p.abs.positions[4].x + (i * 16), ent->p.abs.positions[4].y}, 0, 3, WHITE);
   }
-  DrawTextureEx(ent->p.abs.textures[0], ent->p.abs.positions[0], 0, 3, WHITE);
-  if(ent->p.abs.timers[0] > 0) {
-    DrawText(TextFormat("%d", ent->p.abs.timers[0]), ent->p.abs.positions[0].x, ent->p.abs.positions[0].y, 12, WHITE);
-  }
-  DrawTextureEx(ent->p.abs.textures[1], ent->p.abs.positions[1], 0, 3, WHITE);
-  if(ent->p.abs.timers[1] > 0) {
-    DrawText(TextFormat("%d", ent->p.abs.timers[1]), ent->p.abs.positions[1].x, ent->p.abs.positions[1].y, 12, WHITE);
-  }
-  DrawTextureEx(ent->p.abs.textures[2], ent->p.abs.positions[2], 0, 3, WHITE);
-  if(ent->p.abs.timers[2] > 0) {
-    DrawText(TextFormat("%d", ent->p.abs.timers[2]), ent->p.abs.positions[2].x, ent->p.abs.positions[2].y, 12, WHITE);
-  }
-  DrawTextureEx(ent->p.abs.textures[5], ent->p.abs.positions[5], 0, 3, WHITE);
+  // DrawTextureEx(ent->p.abs.textures[0], ent->p.abs.positions[0], 0, 3, WHITE);
+  // if(ent->p.abs.timers[0] > 0) {
+  //   DrawText(TextFormat("%d", ent->p.abs.timers[0]), ent->p.abs.positions[0].x, ent->p.abs.positions[0].y, 12, WHITE);
+  // }
+  // DrawTextureEx(ent->p.abs.textures[1], ent->p.abs.positions[1], 0, 3, WHITE);
+  // if(ent->p.abs.timers[1] > 0) {
+  //   DrawText(TextFormat("%d", ent->p.abs.timers[1]), ent->p.abs.positions[1].x, ent->p.abs.positions[1].y, 12, WHITE);
+  // }
+  // DrawTextureEx(ent->p.abs.textures[2], ent->p.abs.positions[2], 0, 3, WHITE);
+  // if(ent->p.abs.timers[2] > 0) {
+  //   DrawText(TextFormat("%d", ent->p.abs.timers[2]), ent->p.abs.positions[2].x, ent->p.abs.positions[2].y, 12, WHITE);
+  // }
+  if(ent->p.boosts > 0)
+    DrawTextureEx(ent->p.abs.textures[5], ent->p.abs.positions[5], 0, 3, WHITE);
   for(int i = 0; i < ent->p.boosts; i++) {
     DrawTextureEx(ent->p.abs.textures[5], (Vector2){ent->p.abs.positions[5].x + (i * 24), ent->p.abs.positions[5].y}, 0, 3, WHITE);
   }
-  DrawTextureEx(ent->p.abs.textures[6], ent->p.abs.positions[6], 0, 3, WHITE);
+  if(ent->p.bombs > 0)
+    DrawTextureEx(ent->p.abs.textures[6], ent->p.abs.positions[6], 0, 3, WHITE);
   for(int i = 0; i < ent->p.bombs; i++) {
     DrawTextureEx(ent->p.abs.textures[6], (Vector2){ent->p.abs.positions[6].x + (i * 24), ent->p.abs.positions[6].y}, 0, 3, WHITE);
   }
@@ -534,7 +606,27 @@ void initProjectileAbility(struct projectile *, struct Entity *, enum playerAbil
   
 }
 
-void initProjectileItem(struct projectile *, struct Entity *, enum itemType, Vector2) {
+void initProjectileItem(struct projectile * proj, struct Entity * ent, enum itemType it, Vector2 pos) {
+  
+  proj->pt = USE_ITEM;
+  proj->isActive = true;
+
+  switch(it) {
+    case BOMB:
+      proj->destRect = (Rectangle){pos.x, pos.y, 16, 16};
+      proj->sourceRect = (Rectangle){0, 0, 16, 16};
+      proj->damage = ent->p.level * 3;
+      proj->speed = 0;
+      proj->frameSpeed = 5;
+      proj->texture = LoadTexture("./assets/bigBomb.png");
+      proj->dir = ent->p.dir;
+      break;
+  }
+
+  if(proj->dir == LEFT) {
+    proj->speed *= -1;
+    proj->sourceRect.width *= -1;
+  }
   
 }
 
@@ -559,6 +651,17 @@ void addProjectileListAbility(struct Entity *, struct projectile *, enum playerA
 
 void addProjectileListItem(struct Entity * ent, struct projectile * proj, enum itemType it, Vector2 pos) {
 
+  if (ent->p.projectiles.counter == 1) {
+    // ent->p.projectiles->projectiles->ents = realloc(ent->p.projectiles->projectiles->ents, sizeof (struct Entity));
+    initProjectileItem(&ent->p.projectiles.projectiles[ent->p.projectiles.counter], ent, it, pos);
+    ent->p.projectiles.counter++;
+  } else {
+    ent->p.projectiles.capacity++;
+    // ent->p.projectiles.projectiles = realloc(ent->p.projectiles.projectiles, ent->p.projectiles.capacity * sizeof (struct projectile));
+    reallocProjList(&ent->p.projectiles);
+    initProjectileItem(&ent->p.projectiles.projectiles[ent->p.projectiles.counter], ent, it, pos);
+    ent->p.projectiles.counter++;
+  }
 }
 
 void drawProjectile(struct projectile * proj) {
@@ -669,6 +772,8 @@ void initEntityBlock(struct Entity * ent, enum entityType et, enum blockType bt,
     case TRUNK:
       ent->texture = LoadTexture("./assets/trunksTileSet.png");
       break;
+    case LADDER:
+      ent->texture = LoadTexture("./assets/ladder.png");
   }
 }
 
@@ -697,7 +802,7 @@ void initEntityBlockSpawner(struct Entity * ent, enum entityType et, enum blockT
     case GOBLIN:
       ent->sourceRect = (Rectangle){16, 0, 16, 16};
       ent->b.mobSpawnerProps.maxEntities = 5;
-      ent->b.mobSpawnerProps.timeCounter = 450;
+      ent->b.mobSpawnerProps.timeCounter = 45;
       break;
     case GOLEM:
       ent->sourceRect = (Rectangle){32, 0, 16, 16};
@@ -880,7 +985,13 @@ void gameMobPlayerInter(struct game * gm) {
       if(gm->blocks->ents[j].b.bt == MOBSPAWNER) {
         for(int k = 0; k < gm->blocks->ents[j].b.mobSpawnerProps.mobs.counter; k++) {
           if(CheckCollisionRecs(gm->players->ents[i].destRect, gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].destRect)) {
-            gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].m.health -= 1;
+            if(gm->players->ents[i].destRect.y >= gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].destRect.y) {
+              gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].m.health -= 1;
+            }
+            // if(gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].isActive == true && gm->players->ents[i].p.damageBuff == false) {
+            //   gm->players->ents[i].p.health -= 1;
+            //   gm->players->ents[i].p.damageBuff = true;
+            // }
           }
         }
       }
@@ -1044,6 +1155,14 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
       }
     }
 
+    if(player->p.damageBuff == true) {
+      player->p.damageBuffer++;
+      if(player->p.damageBuffer > 60) {
+        player->p.damageBuffer = 0;
+        player->p.damageBuff = false;
+      }
+    }
+
     timerCounter++;
 }
 
@@ -1063,10 +1182,6 @@ void playerAnimations(struct Entity * player) {
         } else if (player->p.dir == LEFT) {
           player->sourceRect.x += 16;
         }
-      break;
-    case ATTACKING:
-      break;
-    case JUMPING:
       break;
   }
   i++;
@@ -1096,17 +1211,24 @@ void playerControls(struct Entity * player) {
       addProjectileListBasic(player, (Vector2){player->destRect.x, player->destRect.y});
     }
 
-    if(IsKeyPressed(KEY_J) && player->p.abs.timers[0] <= 0) {
-      player->p.abs.timers[0] = 5;
+    if(IsKeyPressed(KEY_J) && player->p.ps == IDLE && player->p.bombs > 0) {
+      addProjectileListItem(player, &player->p.projectiles.projectiles[player->p.projectiles.counter], BOMB, (Vector2){player->destRect.x, player->destRect.y});
+      player->p.bombs--;
     }
+    if(IsKeyPressed(KEY_K) && player->p.ps == IDLE && player->p.boosts > 0) {
+      player->p.boosts--;
+    }
+    // if(IsKeyPressed(KEY_J) && player->p.abs.timers[0] <= 0) {
+    //   player->p.abs.timers[0] = 5;
+    // }
 
-    if(IsKeyPressed(KEY_K) && player->p.abs.timers[0] <= 0) {
-      player->p.abs.timers[1] = 8;
-    }
+    // if(IsKeyPressed(KEY_K) && player->p.abs.timers[0] <= 0) {
+    //   player->p.abs.timers[1] = 8;
+    // }
 
-    if(IsKeyPressed(KEY_L) && player->p.abs.timers[0] <= 0) {
-      player->p.abs.timers[2] = 12;
-    }
+    // if(IsKeyPressed(KEY_L) && player->p.abs.timers[0] <= 0) {
+    //   player->p.abs.timers[2] = 12;
+    // }
 }
 
 void mobPhysics(struct game * gm, struct Entity * mob, struct entityList * blocks) {
@@ -1119,6 +1241,7 @@ void mobPhysics(struct game * gm, struct Entity * mob, struct entityList * block
         mob->destRect.y -= fallSpeed;
         if (blocks->ents[i].b.blockWeight == 2) {
           mob->m.speed *= -1;
+          mob->sourceRect.width *= -1;
         }
       }
     }
