@@ -176,9 +176,11 @@ struct Entity {
        bool UP, RIGHT, DOWN, LEFT;
      } blockBools;
      struct {
-      int maxEntities, timeCounter, numOfMobs;
+      int maxEntities, timeCount, timeCounter, numOfMobs;
       enum mobType mt;
       struct entityList mobs;
+      Rectangle toggleRect;
+      bool rectToggled;
      } mobSpawnerProps;
    } b;
  }; 
@@ -195,6 +197,7 @@ struct chunk {
 
 struct level {
  int depth;
+ int chunkCounter;
  struct chunk * chunks;
  Vector2 pos;
  
@@ -233,8 +236,10 @@ void gameMobPlayerInter(struct game *);
 
 //Level Generation Functions
 // void addChunk(struct game *, int, int, Vector2);
-void addChunk(struct game *, struct chunk *);
-void initChunk(struct chunk *, Vector2);
+void initLevel(struct game *, struct level *, int, int, Vector2 *);
+void addLevelSpawners(struct game *, struct level *); 
+void addChunk(struct game *, struct chunk *, enum blockType);
+void initChunk(struct chunk *, int, int, bool, bool, Vector2);
 void addChunkSpawner(struct game *, struct chunk *); 
 
 //Item List Function
@@ -283,7 +288,7 @@ int main() {
 
   //all things player
   /* ---------------------------------------------------------- */
-  addGamePlayer(&mainGame, mainGame.players, PLAYER, RANGER, (Vector2){0, 16});
+  addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
   /* ---------------------------------------------------------- */
 
   //all things mobs
@@ -299,13 +304,19 @@ int main() {
   //   }
   // }
 
-  struct chunk chunky;
-  struct chunk spunky;
-  initChunk(&chunky, (Vector2){0, 48});
-  initChunk(&spunky, (Vector2){320, 48});
 
-  addChunk(&mainGame, &chunky);
-  addChunk(&mainGame, &spunky);
+  struct level mainLevel;
+  initLevel(&mainGame, &mainLevel, 15, 0, &(Vector2){0,48});
+
+  addLevelSpawners(&mainGame, &mainLevel);
+
+  // struct chunk chunky;
+  // struct chunk spunky;
+  // initChunk(&chunky, 3, 25, 1, 1, (Vector2){0, 48});
+  // initChunk(&spunky, (Vector2){320, 48});
+
+  // addChunk(&mainGame, &chunky, DIRT);
+  // addChunk(&mainGame, &spunky);
 
   // addChunkSpawner(&mainGame, &chunky);
   // addChunkSpawner(&mainGame, &spunky);
@@ -317,9 +328,9 @@ int main() {
   //   }
   // }
 
-  addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, SLIME, (Vector2){32, 32});
-  addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOBLIN, (Vector2){64, 32});
-  addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOLEM, (Vector2){96, 32});
+  // addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, SLIME, (Vector2){32, 32});
+  // addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOBLIN, (Vector2){64, 32});
+  // addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOLEM, (Vector2){96, 32});
   /* ---------------------------------------------------------- */
   
   //camera functionalities
@@ -335,6 +346,17 @@ int main() {
     playerControls(&mainGame.players->ents[0]);
     playerAnimations(&mainGame.players->ents[0]);
 
+    for(int i = 0; i < mainGame.blocks->counter; i++) {
+      if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].isActive == true) {
+        mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
+        for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
+          mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
+          mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
+        }
+      }
+
+      }
+    
     for(int i = 0; i < mainGame.blocks->counter; i++) {
       if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER) {
         mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
@@ -378,18 +400,18 @@ int main() {
   return 0;
 }
 
-void initChunk(struct chunk * ch, Vector2 pos) {
-  ch->height = 2;
-  ch->width = GetRandomValue(5, 25);
-  ch->hasLadder = GetRandomValue(0, 1);
-  ch->hasSpawner = GetRandomValue(0, 1);
+void initChunk(struct chunk * ch, int height, int width, bool hasL, bool hasS, Vector2 pos) {
+  ch->height = height;
+  ch->width = width;
+  ch->hasLadder = hasL;
+  ch->hasSpawner = hasS;
   ch->pos = pos;
 }
 
-void addChunk(struct game * gm, struct chunk * ch) {
+void addChunk(struct game * gm, struct chunk * ch, enum blockType bt) {
   for(int i = 0; i < ch->width; i++) {
     for(int j = 0; j < ch->height; j++) {
-      addGameBlock(gm, gm->blocks, BLOCK, GRASS, (Vector2){ch->pos.x + (i * 16), ch->pos.y + (j * 16)});
+      addGameBlock(gm, gm->blocks, BLOCK, bt, (Vector2){ch->pos.x + (i * 16), ch->pos.y + (j * 16)});
     }
   }
 
@@ -403,7 +425,33 @@ void addChunk(struct game * gm, struct chunk * ch) {
 
 void addChunkSpawner(struct game* gm, struct chunk * ch) {
   if(ch->hasSpawner == true) {
-    addGameBlockSpawner(gm, gm->blocks, BLOCK, MOBSPAWNER, GetRandomValue(0, 3), (Vector2){ch->pos.x + (GetRandomValue(16, ch->width * 16)), ch->pos.y - 16});
+    addGameBlockSpawner(gm, gm->blocks, BLOCK, MOBSPAWNER, GetRandomValue(0, 3), (Vector2){ch->pos.x + (GetRandomValue(32, ch->width * 16 - 32)), ch->pos.y - 16});
+  }
+}
+
+void initLevel(struct game * gm, struct level * lvl, int depth, int counter, Vector2 * pos) {
+  lvl->depth = depth;
+  lvl->chunkCounter = counter;
+  lvl->pos = *pos;  
+  lvl->chunks = malloc(lvl->depth * sizeof(struct chunk));
+
+  for(int i = 0; i < lvl->depth; i++) {
+    if(i %  2 == 0) {
+      initChunk(&lvl->chunks[lvl->chunkCounter], 3, GetRandomValue(10, 25), 0, 1, lvl->pos);
+      addChunk(gm, &lvl->chunks[lvl->chunkCounter], GRASS);
+    } else {
+      initChunk(&lvl->chunks[lvl->chunkCounter], 1, GetRandomValue(5, 10), 0, 0, lvl->pos);
+      addChunk(gm, &lvl->chunks[lvl->chunkCounter], DIRT);
+    }
+
+    lvl->pos.x += (lvl->chunks[lvl->chunkCounter].width * 16 + 16);
+    lvl->chunkCounter++;
+  }
+}
+
+void addLevelSpawners(struct game * gm, struct level * lvl) {
+  for(int i = 0; i < lvl->depth; i++) {
+    addChunkSpawner(gm, &lvl->chunks[i]);
   }
 }
 
@@ -677,6 +725,11 @@ void projectilePhysics(struct game * gm) {
       gm->players->ents[i].p.projectiles.projectiles[j].destRect.x += gm->players->ents[i].p.projectiles.projectiles[j].speed;
       for(int k = 0; k < gm->blocks->counter; k++) {
           if(gm->blocks->ents[k].b.bt == MOBSPAWNER) {
+            if(CheckCollisionRecs(gm->blocks->ents[k].destRect, gm->players->ents[i].p.projectiles.projectiles[j].destRect)) {
+              if(gm->players->ents[i].p.projectiles.projectiles[j].isActive == true) {
+                gm->blocks->ents[k].isActive = false;
+              }
+            }
             for(int h = 0; h < gm->blocks->ents[k].b.mobSpawnerProps.mobs.counter; h++) {
               if(CheckCollisionRecs(gm->players->ents[i].p.projectiles.projectiles[j].destRect, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect)) {
                 if((gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].isActive == true) && (gm->players->ents[i].p.projectiles.projectiles[j].isActive == true)) {
@@ -792,6 +845,9 @@ void initEntityBlockSpawner(struct Entity * ent, enum entityType et, enum blockT
   ent->b.blockBools.DOWN = false;
   ent->b.blockBools.LEFT = false;
   ent->b.mobSpawnerProps.mt = mt;
+  ent->b.mobSpawnerProps.timeCount = 0;
+  ent->b.mobSpawnerProps.toggleRect = (Rectangle){ent->destRect.x - (ent->destRect.width * 3),ent->destRect.y - (ent->destRect.height * 3), ent->destRect.width * 6, ent->destRect.height * 6};
+  ent->b.mobSpawnerProps.rectToggled = false;
 
   switch(ent->b.mobSpawnerProps.mt) {
     case SLIME:
@@ -985,13 +1041,10 @@ void gameMobPlayerInter(struct game * gm) {
       if(gm->blocks->ents[j].b.bt == MOBSPAWNER) {
         for(int k = 0; k < gm->blocks->ents[j].b.mobSpawnerProps.mobs.counter; k++) {
           if(CheckCollisionRecs(gm->players->ents[i].destRect, gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].destRect)) {
-            if(gm->players->ents[i].destRect.y >= gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].destRect.y) {
-              gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].m.health -= 1;
+            if(gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].isActive == true && gm->players->ents[i].p.damageBuff == false) {
+              gm->players->ents[i].p.health -= 1;
+              gm->players->ents[i].p.damageBuff = true;
             }
-            // if(gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].isActive == true && gm->players->ents[i].p.damageBuff == false) {
-            //   gm->players->ents[i].p.health -= 1;
-            //   gm->players->ents[i].p.damageBuff = true;
-            // }
           }
         }
       }
@@ -1279,9 +1332,15 @@ void mobAnimations(struct Entity * mob) {
 
 void mobSpawnerProcess(struct Entity * mobSpawner, struct game * gm, enum entityType et, enum mobType mt, Vector2 pos) {
   
-  static int timerCount = 0;
+  mobSpawner->b.mobSpawnerProps.timeCount++;
 
-  if((timerCount % mobSpawner->b.mobSpawnerProps.timeCounter == 0) && (mobSpawner->b.mobSpawnerProps.numOfMobs < mobSpawner->b.mobSpawnerProps.maxEntities)) {
+  for(int i = 0; i < gm->players->counter; i++) {
+    if(CheckCollisionRecs(mobSpawner->b.mobSpawnerProps.toggleRect, gm->players->ents[i].destRect)) {
+      mobSpawner->b.mobSpawnerProps.rectToggled = true;
+    }
+  }
+
+  if((mobSpawner->b.mobSpawnerProps.timeCount % mobSpawner->b.mobSpawnerProps.timeCounter == 0) && (mobSpawner->b.mobSpawnerProps.numOfMobs < mobSpawner->b.mobSpawnerProps.maxEntities) && (mobSpawner->isActive == true) && (mobSpawner->b.mobSpawnerProps.rectToggled == true)) {
     // addGameMob(gm, gm->mobs, et, mt, pos);
 
     initEntityMob(&mobSpawner->b.mobSpawnerProps.mobs.ents[mobSpawner->b.mobSpawnerProps.mobs.counter], MOB, mobSpawner->b.mobSpawnerProps.mt, pos);
@@ -1293,6 +1352,7 @@ void mobSpawnerProcess(struct Entity * mobSpawner, struct game * gm, enum entity
 
     reallocEntityList(&mobSpawner->b.mobSpawnerProps.mobs);
 
+    mobSpawner->b.mobSpawnerProps.timeCount = 0;
   }
 
   for(int i = 0; i < mobSpawner->b.mobSpawnerProps.mobs.counter; i++) {
@@ -1302,7 +1362,6 @@ void mobSpawnerProcess(struct Entity * mobSpawner, struct game * gm, enum entity
     }
   }
 
-  timerCount++;
 }
 
 void blockWeightChecker(struct Entity * block, struct Entity * blocks, int blockAmount) {
