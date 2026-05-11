@@ -16,8 +16,8 @@ enum playerType {
 enum playerState {
   IDLE,
   MOVING,
-  BOOSTING,
-  JUMPING
+  JUMPING,
+  ONLADDER
 };
 
 enum playerAbilities {
@@ -144,6 +144,7 @@ struct Entity {
      int overHeal;
      int damageBuffer;
      int speed;
+     int speedBuff;
      int coins;
      int boosts;
      int bombs;
@@ -154,6 +155,10 @@ struct Entity {
      int maxBombs;
      enum playerType pt;
      enum playerState ps;
+     int idleBuffer;
+     bool idleBool;
+     int speedBuffer;
+     bool speedBool;
      enum blockCheck dir;
      bool damageBuff;
      struct abilities abs;
@@ -200,7 +205,20 @@ struct level {
  int chunkCounter;
  struct chunk * chunks;
  Vector2 pos;
- 
+ };
+
+struct damageNumber {
+  Vector2 pos;
+  int fontSize;
+  int num;
+  int r, g, b, a;
+  bool isActive;
+};
+
+struct damageNumList {
+  int capacity;
+  int counter;
+  struct damageNumber * numbers;
 };
 
 struct game {
@@ -208,6 +226,7 @@ struct game {
   struct entityList * mobs;
   struct entityList * blocks;
   struct itemList * items;
+  struct damageNumList * numbers;
 };
 
 //Entity Functions
@@ -226,13 +245,20 @@ void initGamePlayers(struct game *, int, int);
 void initGameMobs(struct game *, int, int);
 void initGameBlocks(struct game *, int, int);
 void initGameItems(struct game *, int, int);
+void initGameNumbers(struct game *, int, int);
 void initGame(struct game *, int, int);
 void addGamePlayer(struct game *, struct entityList *, enum entityType, enum playerType, Vector2);
 void addGameMob(struct game *, struct entityList *, enum entityType, enum mobType, Vector2);
 void addGameBlock(struct game *, struct entityList *, enum entityType, enum blockType, Vector2);
 void addGameBlockSpawner(struct game *, struct entityList *, enum entityType, enum blockType, enum mobType, Vector2);
+void addGameNumber(struct game *, struct damageNumList *, int, int, int, int, int, int, Vector2);
 void drawGame(struct game *);
 void gameMobPlayerInter(struct game *);
+
+//damage number
+void initDamageNum(struct damageNumber *, int, int, int, int, int, int, Vector2);
+void damagePhysics(struct game *);
+void reallocNumList(struct damageNumList *);
 
 //Level Generation Functions
 // void addChunk(struct game *, int, int, Vector2);
@@ -291,47 +317,10 @@ int main() {
   addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
   /* ---------------------------------------------------------- */
 
-  //all things mobs
-  /* ---------------------------------------------------------- */
-  /* ---------------------------------------------------------- */
-
-
-  // all things blocks
-  /* ---------------------------------------------------------- */
-  // for(int i = 0; i < 20; i++) {
-  //   for(int j = 0; j < 2; j++) {
-  //     addGameBlock(&mainGame, mainGame.blocks, BLOCK, GRASS, (Vector2){i * 16, j * 16 + 48});
-  //   }
-  // }
-
-
   struct level mainLevel;
   initLevel(&mainGame, &mainLevel, 15, 0, &(Vector2){0,48});
 
   addLevelSpawners(&mainGame, &mainLevel);
-
-  // struct chunk chunky;
-  // struct chunk spunky;
-  // initChunk(&chunky, 3, 25, 1, 1, (Vector2){0, 48});
-  // initChunk(&spunky, (Vector2){320, 48});
-
-  // addChunk(&mainGame, &chunky, DIRT);
-  // addChunk(&mainGame, &spunky);
-
-  // addChunkSpawner(&mainGame, &chunky);
-  // addChunkSpawner(&mainGame, &spunky);
-
-  // for(int i = 0; i < mainGame.blocks->counter; i++) {
-  //   if(mainGame.blocks->ents[i].b.bt != MOBSPAWNER) {
-  //     blockWeightChecker(&mainGame.blocks->ents[i], mainGame.blocks->ents, mainGame.blocks->counter);
-  //     blockSourceDestChecker(&mainGame.blocks->ents[i]);
-  //   }
-  // }
-
-  // addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, SLIME, (Vector2){32, 32});
-  // addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOBLIN, (Vector2){64, 32});
-  // addGameBlockSpawner(&mainGame, mainGame.blocks, BLOCK, MOBSPAWNER, GOLEM, (Vector2){96, 32});
-  /* ---------------------------------------------------------- */
   
   //camera functionalities
   Camera2D camera = { 0 };
@@ -346,16 +335,16 @@ int main() {
     playerControls(&mainGame.players->ents[0]);
     playerAnimations(&mainGame.players->ents[0]);
 
-    for(int i = 0; i < mainGame.blocks->counter; i++) {
-      if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].isActive == true) {
-        mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
-        for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
-          mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
-          mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
-        }
-      }
+    // for(int i = 0; i < mainGame.blocks->counter; i++) {
+    //   if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].isActive == true) {
+    //     mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
+    //     for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
+    //       mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
+    //       mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
+    //     }
+    //   }
 
-      }
+    //   }
     
     for(int i = 0; i < mainGame.blocks->counter; i++) {
       if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER) {
@@ -381,6 +370,8 @@ int main() {
     }
 
     projectilePhysics(&mainGame);
+
+    damagePhysics(&mainGame);
     
     BeginDrawing();
     ClearBackground(BLACK);
@@ -436,15 +427,19 @@ void initLevel(struct game * gm, struct level * lvl, int depth, int counter, Vec
   lvl->chunks = malloc(lvl->depth * sizeof(struct chunk));
 
   for(int i = 0; i < lvl->depth; i++) {
-    if(i %  2 == 0) {
-      initChunk(&lvl->chunks[lvl->chunkCounter], 3, GetRandomValue(10, 25), 0, 1, lvl->pos);
+    if(i %  4 == 0) {
+      initChunk(&lvl->chunks[lvl->chunkCounter], 3, GetRandomValue(10, 12), 0, 1, lvl->pos);
       addChunk(gm, &lvl->chunks[lvl->chunkCounter], GRASS);
+    } else if ( i % 2 == 0) {
+      initChunk(&lvl->chunks[lvl->chunkCounter], GetRandomValue(5, 8), 1, 0, 0, lvl->pos);
+      addChunk(gm, &lvl->chunks[lvl->chunkCounter], LADDER);
+      lvl->pos.y += (lvl->chunks[lvl->chunkCounter].height * 16);
     } else {
-      initChunk(&lvl->chunks[lvl->chunkCounter], 1, GetRandomValue(5, 10), 0, 0, lvl->pos);
+      initChunk(&lvl->chunks[lvl->chunkCounter], 1, GetRandomValue(3, 7), 0, 0, lvl->pos);
       addChunk(gm, &lvl->chunks[lvl->chunkCounter], DIRT);
     }
 
-    lvl->pos.x += (lvl->chunks[lvl->chunkCounter].width * 16 + 16);
+    lvl->pos.x += (lvl->chunks[lvl->chunkCounter].width * 16);
     lvl->chunkCounter++;
   }
 }
@@ -502,12 +497,17 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
   ent->p.damageBuffer = 0;
   ent->p.overHeal = 3;
   ent->p.bombs = 3;
-  ent->p.boosts = 0;
+  ent->p.boosts = 3;
   ent->p.coins = 50;
   ent->p.level = 1;
   ent->p.maxBombs = 3;
   ent->p.maxBoosts = 3;
   ent->p.maxOverHeal = 5;
+  ent->p.idleBool = true;
+  ent->p.idleBuffer = 0;
+  ent->p.speedBool = false;
+  ent->p.speedBuffer = 0;
+  ent->p.speedBuff = 0;
   ent->p.abs.positions[0] = (Vector2){33 * Scale, 18 * Scale};
   ent->p.abs.positions[1] = (Vector2){51 * Scale, 18 * Scale};
   ent->p.abs.positions[2] = (Vector2){69 * Scale, 18 * Scale};
@@ -534,7 +534,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/swordsmen.png");
       ent->p.maxHealth = 7;
       ent->p.health = 5;
-      ent->p.speed = 2;
+      ent->p.speed = 1 + ent->p.speedBuff;
       ent->p.abs.UIBanner = LoadTexture("./assets/swordsmenUI.png");
       ent->p.abs.pa[0] = AIRSLASH;
       ent->p.abs.pa[1] = RISINGSLASH;
@@ -547,7 +547,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/ranger.png");
       ent->p.maxHealth = 5;
       ent->p.health = 3;
-      ent->p.speed = 2;
+      ent->p.speed = 1 + ent->p.speedBuff;
       ent->p.abs.UIBanner = LoadTexture("./assets/rangerUI.png");
       ent->p.abs.pa[0] = SUPERCHARGEDSHOT;
       ent->p.abs.pa[1] = BACKROLL;
@@ -560,7 +560,7 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
       ent->texture = LoadTexture("./assets/mage.png");
       ent->p.maxHealth = 6;
       ent->p.health = 4;
-      ent->p.speed = 2;
+      ent->p.speed = 1 + ent->p.speedBuff;
       ent->p.abs.UIBanner = LoadTexture("./assets/mageUI.png");
       ent->p.abs.pa[0] = GALVANICWALL;
       ent->p.abs.pa[1] = BOUNCEFORCE;
@@ -618,7 +618,7 @@ void initProjectileBasic(struct projectile * proj, struct Entity * ent, Vector2 
       proj->destRect = (Rectangle){pos.x, pos.y, 6, 13};
       proj->sourceRect = (Rectangle){0, 0, 6, 13};
       proj->damage = ent->p.level * 2;
-      proj->speed = 1;
+      proj->speed = 2;
       proj->frameSpeed = 5;
       proj->texture = LoadTexture("./assets/swordsmenBasicAttack.png");
       proj->dir = ent->p.dir;
@@ -627,7 +627,7 @@ void initProjectileBasic(struct projectile * proj, struct Entity * ent, Vector2 
       proj->destRect = (Rectangle){pos.x, pos.y, 10, 7};
       proj->sourceRect = (Rectangle){0, 0, 10, 7};
       proj->damage = ent->p.level * 2;
-      proj->speed = 1;
+      proj->speed = 2;
       proj->frameSpeed = 5;
       proj->texture = LoadTexture("./assets/rangerBasicAttack.png");
       proj->dir = ent->p.dir;
@@ -636,7 +636,7 @@ void initProjectileBasic(struct projectile * proj, struct Entity * ent, Vector2 
       proj->destRect = (Rectangle){pos.x, pos.y, 8, 8};
       proj->sourceRect = (Rectangle){0, 0, 8, 8};
       proj->damage = ent->p.level * 2;
-      proj->speed = 1;
+      proj->speed = 2;
       proj->frameSpeed = 5;
       proj->texture = LoadTexture("./assets/mageBasicAttack.png");
       proj->dir = ent->p.dir;
@@ -675,7 +675,6 @@ void initProjectileItem(struct projectile * proj, struct Entity * ent, enum item
     proj->speed *= -1;
     proj->sourceRect.width *= -1;
   }
-  
 }
 
 void addProjectileListBasic(struct Entity * ent, Vector2 pos) {
@@ -723,6 +722,10 @@ void projectilePhysics(struct game * gm) {
   for(int i = 0; i < gm->players->counter; i++) {
     for(int j = 0; j < gm->players->ents[i].p.projectiles.counter; j++) {
       gm->players->ents[i].p.projectiles.projectiles[j].destRect.x += gm->players->ents[i].p.projectiles.projectiles[j].speed;
+
+      if(gm->players->ents[i].p.projectiles.projectiles[j].it == BOMB) {
+        gm->players->ents[i].p.projectiles.projectiles[j].destRect.y += 1;
+      }
       for(int k = 0; k < gm->blocks->counter; k++) {
           if(gm->blocks->ents[k].b.bt == MOBSPAWNER) {
             if(CheckCollisionRecs(gm->blocks->ents[k].destRect, gm->players->ents[i].p.projectiles.projectiles[j].destRect)) {
@@ -734,6 +737,7 @@ void projectilePhysics(struct game * gm) {
               if(CheckCollisionRecs(gm->players->ents[i].p.projectiles.projectiles[j].destRect, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect)) {
                 if((gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].isActive == true) && (gm->players->ents[i].p.projectiles.projectiles[j].isActive == true)) {
                   gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].m.health -= gm->players->ents[i].p.projectiles.projectiles[j].damage;
+                  addGameNumber(gm, gm->numbers, 4, gm->players->ents[i].p.projectiles.projectiles[j].damage, 255, 255, 255, 255, (Vector2){gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect.x, gm->blocks->ents[k].b.mobSpawnerProps.mobs.ents[h].destRect.y});
                   gm->players->ents[i].p.projectiles.projectiles[j].isActive = false;
                 }
               }
@@ -743,7 +747,7 @@ void projectilePhysics(struct game * gm) {
       }
     }
   }
-    
+
 }
 
 
@@ -887,9 +891,9 @@ void drawEntity(struct Entity * ent) {
     if((ent->b.bt == MOBSPAWNER) && (ent->et == BLOCK)) {
       DrawText(TextFormat("%d", ent->b.mobSpawnerProps.numOfMobs), ent->destRect.x, ent->destRect.y, 8, WHITE); 
     }
-    if((ent->et == MOB)) {
-      DrawText(TextFormat("%d", ent->m.health), ent->destRect.x, ent->destRect.y, 8, WHITE); 
-    }
+    // if((ent->et == MOB)) {
+    //   DrawText(TextFormat("%d", ent->m.health), ent->destRect.x, ent->destRect.y, 8, WHITE); 
+    // }
   }
 }
 
@@ -921,11 +925,62 @@ void initGameItems(struct game * gm, int cap, int count) {
   gm->items->items = malloc(sizeof (struct Item));
 }
 
+void initGameNumbers(struct game * gm, int cap, int count) {
+  gm->numbers = malloc(sizeof(struct damageNumList));
+  gm->numbers->capacity = cap;
+  gm->numbers->counter = count;
+  gm->numbers->numbers = malloc(sizeof(struct damageNumber));
+}
+
 void initGame(struct game * gm, int cap, int count) {
   initGamePlayers(gm, cap, count);
   initGameMobs(gm, cap, count);
   initGameBlocks(gm, cap, count);
   initGameItems(gm, cap, count);
+  initGameNumbers(gm, cap, count);
+}
+
+void initDamageNum(struct damageNumber * dm, int fontSize, int num, int r, int b, int g, int a, Vector2 pos) {
+  dm->isActive = true;
+  dm->fontSize = fontSize;
+  dm->num = num;
+  dm->r = r;
+  dm->b = b;
+  dm->g = g;
+  dm->a = a;
+  dm->pos = pos;
+}
+
+void drawDamageNum(struct damageNumber * dm) {
+  if(dm->isActive == true) {
+    DrawText(TextFormat("%d", dm->num), dm->pos.x, dm->pos.y, dm->fontSize, (Color){dm->r, dm->g, dm->b, dm->a});
+  }
+}
+
+void damagePhysics(struct game * gm) {
+  for(int i = 0; i < gm->numbers->counter; i++) {
+    if(gm->numbers->numbers[i].isActive == true) {
+      gm->numbers->numbers[i].a -= 1;
+      gm->numbers->numbers[i].pos.y -= 0.2;
+      if(gm->numbers->numbers[i].a < 10) {
+        gm->numbers->numbers[i].isActive = false;
+      }
+    }
+  } 
+}
+
+void addGameNumber(struct game * gm, struct damageNumList * dl, int fontSize, int num, int r, int g, int b, int a, Vector2 pos) {
+  if (gm->numbers->counter == 0) {
+    // gm->numbers->ents = realloc(gm->numbers->ents, sizeof (struct Entity));
+    initDamageNum(&gm->numbers->numbers[gm->numbers->counter], fontSize, num, r, b, g, a, pos);
+    gm->numbers->counter++;
+  } else {
+    gm->numbers->capacity++;
+    // gm->numbers->ents = realloc(gm->numbers->ents, gm->numbers->capacity * sizeof (struct Entity));
+    reallocNumList(gm->numbers);
+    initDamageNum(&gm->numbers->numbers[gm->numbers->counter], fontSize, num, r, b, g, a, pos);
+    gm->numbers->counter++;
+  }
 }
 
 void addGamePlayer(struct game * gm, struct entityList * el, enum entityType et, enum playerType pt, Vector2 pos) {
@@ -1026,6 +1081,10 @@ void drawGame(struct game * gm) {
   for(int i = 0; i < gm->items->counter; i++) {
     drawItem(&gm->items->items[i]);
   }
+
+  for(int i = 0; i < gm->numbers->counter; i++) {
+    drawDamageNum(&gm->numbers->numbers[i]);    
+  }
 }
 
 void gameMobPlayerInter(struct game * gm) {
@@ -1044,6 +1103,7 @@ void gameMobPlayerInter(struct game * gm) {
             if(gm->blocks->ents[j].b.mobSpawnerProps.mobs.ents[k].isActive == true && gm->players->ents[i].p.damageBuff == false) {
               gm->players->ents[i].p.health -= 1;
               gm->players->ents[i].p.damageBuff = true;
+              addGameNumber(gm, gm->numbers, 4, 1, 250, 5, 7, 255, (Vector2){gm->players->ents[i].destRect.x, gm->players->ents[i].destRect.y});
             }
           }
         }
@@ -1178,6 +1238,15 @@ void reallocProjList(struct projList * projList) {
   projList->projectiles = realloc(projList->projectiles, projList->capacity * sizeof (struct projectile));
 }
 
+void reallocNumList(struct damageNumList * numList) {
+  if(numList->counter >= numList->capacity / 2) {
+    numList->capacity *= 2;
+  }
+
+  numList->numbers = realloc(numList->numbers, numList->capacity * sizeof (struct projectile));
+  
+}
+
 void playerPhysics(struct Entity * player, struct entityList * blocks) {
 
     static int timerCounter = 0;
@@ -1188,9 +1257,19 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
   
 
     for(int i = 0; i < blocks->capacity; i++) {
+      if((CheckCollisionRecs(player->destRect, blocks->ents[i].destRect)) && (blocks->ents[i].b.bt == LADDER) && (IsKeyDown(KEY_S))) {
+        // player->destRect.y -= fallSpeed;
+        fallCounter = 0;
+        player->destRect.y += fallSpeed;
+        player->p.ps = ONLADDER;
+        player->p.idleBool = true;
+      }
+
       if((CheckCollisionRecs(player->destRect, blocks->ents[i].destRect)) && (blocks->ents[i].b.bt != MOBSPAWNER)) {
         player->destRect.y -= fallSpeed;
         fallCounter = 0;
+        player->p.idleBool = true;
+        // player->p.ps = IDLE;
       }
     }
 
@@ -1216,6 +1295,24 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
       }
     }
 
+    if(player->p.idleBool == true) {
+      player->p.idleBuffer++;
+      if(player->p.idleBuffer > 60) {
+        player->p.idleBuffer = 0;
+        player->p.idleBool = false;
+        player->p.ps = IDLE;
+      }
+    }
+
+    if(player->p.speedBool == true) {
+      player->p.speedBuffer++;
+      if(player->p.speedBuffer > 300) {
+        player->p.speedBuffer = 0;
+        player->p.speedBool = false;
+        player->p.speed = 1;
+        player->p.ps = IDLE;
+      }
+    }
     timerCounter++;
 }
 
@@ -1236,6 +1333,11 @@ void playerAnimations(struct Entity * player) {
           player->sourceRect.x += 16;
         }
       break;
+    case ONLADDER:
+      player->sourceRect.y = 32;
+      if(i % 8 == 0)
+        player->sourceRect.x += 16;
+      break;
   }
   i++;
 }
@@ -1244,6 +1346,7 @@ void playerControls(struct Entity * player) {
 
     if(IsKeyDown(KEY_D)) {
       player->p.ps = MOVING;
+      player->p.idleBool = true;
       player->destRect.x += player->p.speed;
       if(player->p.dir == LEFT) {
         player->p.dir = RIGHT;
@@ -1251,12 +1354,15 @@ void playerControls(struct Entity * player) {
       }
     } else if(IsKeyDown(KEY_A)) {
       player->p.ps = MOVING;
+      player->p.idleBool = true;
       player->destRect.x -= player->p.speed;
       if(player->p.dir == RIGHT) {
         player->p.dir = LEFT;
         player->sourceRect.width *= -1;
       }
-    } else {
+    }
+
+    if(IsKeyPressed(KEY_H)) {
       player->p.ps = IDLE;
     }
 
@@ -1264,11 +1370,16 @@ void playerControls(struct Entity * player) {
       addProjectileListBasic(player, (Vector2){player->destRect.x, player->destRect.y});
     }
 
-    if(IsKeyPressed(KEY_J) && player->p.ps == IDLE && player->p.bombs > 0) {
+    if(IsKeyPressed(KEY_J) && player->p.bombs > 0) {
+      player->p.ps = IDLE;
       addProjectileListItem(player, &player->p.projectiles.projectiles[player->p.projectiles.counter], BOMB, (Vector2){player->destRect.x, player->destRect.y});
       player->p.bombs--;
     }
-    if(IsKeyPressed(KEY_K) && player->p.ps == IDLE && player->p.boosts > 0) {
+    if(IsKeyPressed(KEY_K) && player->p.boosts > 0) {
+      player->p.ps = IDLE;
+      player->p.speed += 1;
+      player->p.speedBool = true;
+      player->p.speedBuffer = 0;
       player->p.boosts--;
     }
     // if(IsKeyPressed(KEY_J) && player->p.abs.timers[0] <= 0) {
