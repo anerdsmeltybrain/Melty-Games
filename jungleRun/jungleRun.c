@@ -1,6 +1,14 @@
 #include <raylib.h>
 #include <stdlib.h>
 
+enum screenType {
+  TITLE,
+  MAINMENU,
+  GAME,
+  OPTIONS,
+  END
+};
+
 enum entityType {
   PLAYER,
   MOB,
@@ -229,6 +237,16 @@ struct game {
   struct damageNumList * numbers;
 };
 
+struct title {
+  Texture2D titleBanner;
+  struct itemList * orbs;
+};
+
+//title screen functions
+void initTitle(struct title *);
+void updateTitle(struct title *);
+void drawTitle(struct title *);
+
 //Entity Functions
 void initEntity(struct Entity *, enum entityType, Vector2);
 void initEntityPlayer(struct Entity *, enum entityType, enum playerType, Vector2);
@@ -305,91 +323,184 @@ int main() {
   int screenHeight = 480;
   int playerScore = 0;
 
+  enum screenType screens;
+
+  screens = TITLE;
+  
+  struct game mainGame;
+  struct level mainLevel;
+  struct title titleScreen;
+  Camera2D camera = { 0 };
+
   InitWindow(screenWidth, screenHeight, "Jungle Run");
   SetTargetFPS(60);
 
-  //the whole damn game
-  struct game mainGame;
-  initGame(&mainGame, 5, 0);
+init:
+  //init data for each screen
+  switch(screens) {
+    case TITLE:
+      initTitle(&titleScreen);
+      break;
+    case MAINMENU:
+      break;
+    case GAME:
+      initGame(&mainGame, 5, 0);
 
-  //all things player
-  /* ---------------------------------------------------------- */
-  addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
-  /* ---------------------------------------------------------- */
+      //all things player
+      /* ---------------------------------------------------------- */
+      addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
+      /* ---------------------------------------------------------- */
+      initLevel(&mainGame, &mainLevel, 15, 0, &(Vector2){0,48});
 
-  struct level mainLevel;
-  initLevel(&mainGame, &mainLevel, 15, 0, &(Vector2){0,48});
-
-  addLevelSpawners(&mainGame, &mainLevel);
+      addLevelSpawners(&mainGame, &mainLevel);
   
-  //camera functionalities
-  Camera2D camera = { 0 };
-  camera.offset = (Vector2){screenWidth / 2, screenHeight / 2};
-  camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
-  camera.rotation = 0.0f;
-  camera.zoom = 2.0f;
+      //camera functionalities
+      camera.offset = (Vector2){screenWidth / 2, screenHeight / 2};
+      camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
+      camera.rotation = 0.0f;
+      camera.zoom = 2.0f;
+      break;
+    case OPTIONS:
+      break;
+    case END:
+      break;
+  }
 
   while(!WindowShouldClose()) {
-    camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
-    playerPhysics(&mainGame.players->ents[0], mainGame.blocks);
-    playerControls(&mainGame.players->ents[0]);
-    playerAnimations(&mainGame.players->ents[0]);
 
-    // for(int i = 0; i < mainGame.blocks->counter; i++) {
-    //   if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER && mainGame.blocks->ents[i].isActive == true) {
-    //     mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
-    //     for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
-    //       mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
-    //       mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
-    //     }
-    //   }
-
-    //   }
-    
-    for(int i = 0; i < mainGame.blocks->counter; i++) {
-      if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER) {
-        mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
-        for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
-          mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
-          mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
+    //updates per screen
+    switch(screens) {
+      case TITLE:
+        if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE)) {
+          screens = GAME;
+          goto init;
         }
-      }
+        updateTitle(&titleScreen);
+        break;
+      case MAINMENU:
+        break;
+      case GAME:
+        camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
+        playerPhysics(&mainGame.players->ents[0], mainGame.blocks);
+        playerControls(&mainGame.players->ents[0]);
+        playerAnimations(&mainGame.players->ents[0]);
+    
+        for(int i = 0; i < mainGame.blocks->counter; i++) {
+          if(mainGame.blocks->ents[i].b.bt == MOBSPAWNER) {
+            mobSpawnerProcess(&mainGame.blocks->ents[i], &mainGame, MOB, mainGame.blocks->ents[i].b.mobSpawnerProps.mt, (Vector2){mainGame.blocks->ents[i].destRect.x, mainGame.blocks->ents[i].destRect.y});
+            for(int j = 0; j < mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.counter; j++) {
+              mobPhysics(&mainGame, &mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j], mainGame.blocks);
+              mobAnimations(&mainGame.blocks->ents[i].b.mobSpawnerProps.mobs.ents[j]);
+            }
+          }
 
-      }
+          }
     
 
-    for(int i = 0; i < mainGame.mobs->counter; i++) {
-      mobPhysics(&mainGame, &mainGame.mobs->ents[i], mainGame.blocks);
-      mobAnimations(&mainGame.mobs->ents[i]);
+        for(int i = 0; i < mainGame.mobs->counter; i++) {
+          mobPhysics(&mainGame, &mainGame.mobs->ents[i], mainGame.blocks);
+          mobAnimations(&mainGame.mobs->ents[i]);
+        }
+
+        gameMobPlayerInter(&mainGame);
+
+        for(int i = 0; i < mainGame.items->counter; i++) {
+          itemPhysics(&mainGame, &mainGame.items->items[i]);
+        }
+
+        projectilePhysics(&mainGame);
+
+        damagePhysics(&mainGame);
+        break;
+      case OPTIONS:
+        break;
+      case END:
+        break;
     }
-
-    gameMobPlayerInter(&mainGame);
-
-    for(int i = 0; i < mainGame.items->counter; i++) {
-      itemPhysics(&mainGame, &mainGame.items->items[i]);
-    }
-
-    projectilePhysics(&mainGame);
-
-    damagePhysics(&mainGame);
     
     BeginDrawing();
     ClearBackground(BLACK);
+    //drawings per screen
+      switch(screens) {
+        case TITLE:
+          drawTitle(&titleScreen);
+          break;
+        case MAINMENU:
+          break;
+        case GAME:
+          BeginMode2D(camera);
 
-    // DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
-    BeginMode2D(camera);
+          drawGame(&mainGame);
 
-    drawGame(&mainGame);
-
-    EndMode2D();
-    drawAbilities(&mainGame.players->ents[0]);
-
+          EndMode2D();
+          drawAbilities(&mainGame.players->ents[0]);
+          break;
+        case OPTIONS:
+          break;
+        case END:
+          break;
+      }
     EndDrawing();
   }
 
   CloseWindow();
   return 0;
 }
+
+void initTitle(struct title * title) {
+  title->titleBanner = LoadTexture("./assets/titleBanner.png");
+  title->orbs = malloc(sizeof(struct itemList));
+  title->orbs->capacity = 1;
+  title->orbs->counter = 0;
+  title->orbs->items = malloc(sizeof(struct Item));
+}
+
+void updateTitle(struct title * title) {
+  
+  static int counter = 0;
+
+  if(counter % 15 == 0) {
+
+
+    if (title->orbs->counter == 0) {
+      // title->orbs->ents = realloc(title->orbs->ents, sizeof (struct Entity));
+      initItem(&title->orbs->items[title->orbs->counter], GetRandomValue(1, 4), (Vector2){GetRandomValue(32, 640), 0});
+      title->orbs->counter++;
+    } else {
+      title->orbs->capacity++;
+      // title->orbs->ents = realloc(title->orbs->ents, title->orbs->capacity * sizeof (struct Entity));
+      reallocItemList(title->orbs);
+      initItem(&title->orbs->items[title->orbs->counter], GetRandomValue(1, 4), (Vector2){GetRandomValue(32, 640), 0});
+      title->orbs->counter++;
+    }
+
+    counter = 0;
+  }
+
+
+  for(int i = 0; i < title->orbs->counter; i++) {
+    if(title->orbs->items[i].isActive == true) {
+      title->orbs->items[i].destRect.y++;
+    }
+    if(title->orbs->items[i].destRect.y > (GetScreenHeight() + 32)) {
+      title->orbs->items[i].isActive = false;
+    }
+  }
+
+  counter++;
+}
+
+void drawTitle(struct title * title) {
+
+  for(int i = 0; i < title->orbs->counter; i++) {
+    // drawItem(&title->orbs->items[i]);
+    DrawTextureEx(title->orbs->items[i].texture, (Vector2){title->orbs->items[i].destRect.x, title->orbs->items[i].destRect.y}, 0.0f, 2.0f, WHITE);
+  }
+
+  DrawTextureEx(title->titleBanner, (Vector2){(GetScreenWidth() / 2) - ((title->titleBanner.width * 2) / 2), (GetScreenHeight() / 2) - ((title->titleBanner.height * 2) / 2)}, 0.0f, 2.0f, WHITE);
+  
+}
+
 
 void initChunk(struct chunk * ch, int height, int width, bool hasL, bool hasS, Vector2 pos) {
   ch->height = height;
