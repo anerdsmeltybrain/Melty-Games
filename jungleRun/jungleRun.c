@@ -377,12 +377,12 @@ int main() {
     ClearBackground(BLACK);
 
     // DrawText(TextFormat("Score: %d", playerScore), 0, 0, 32, WHITE);
-    drawAbilities(&mainGame.players->ents[0]);
     BeginMode2D(camera);
 
     drawGame(&mainGame);
 
     EndMode2D();
+    drawAbilities(&mainGame.players->ents[0]);
 
     EndDrawing();
   }
