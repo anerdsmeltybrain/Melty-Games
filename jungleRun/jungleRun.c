@@ -301,6 +301,7 @@ void reallocNumList(struct damageNumList *);
 void initLevel(struct game *, struct level *, int, int, Vector2 *);
 void addLevelSpawners(struct game *, struct level *); 
 void addChunk(struct game *, struct chunk *, enum blockType);
+void addChunkDir(struct game *, struct chunk *, enum blockType, enum blockCheck, enum blockCheck);
 void initChunk(struct chunk *, int, int, bool, bool, Vector2);
 void addChunkSpawner(struct game *, struct chunk *); 
 
@@ -375,7 +376,7 @@ init:
       /* ---------------------------------------------------------- */
       addGamePlayer(&mainGame, mainGame.players, PLAYER, SWORDSMEN, (Vector2){0, 16});
       /* ---------------------------------------------------------- */
-      initLevel(&mainGame, &mainLevel, 15, 0, &(Vector2){0,48});
+      initLevel(&mainGame, &mainLevel, 50, 0, &(Vector2){0,48});
 
       addLevelSpawners(&mainGame, &mainLevel);
   
@@ -642,6 +643,49 @@ void addChunk(struct game * gm, struct chunk * ch, enum blockType bt) {
   }
 }
 
+void addChunkDir(struct game * gm, struct chunk * ch, enum blockType bt, enum blockCheck ns, enum blockCheck ew) {
+
+  if((ns == DOWN) && (ew == RIGHT)) {
+    for(int i = 0; i < ch->width; i++) {
+      for(int j = 0; j < ch->height; j++) {
+        addGameBlock(gm, gm->blocks, BLOCK, bt, (Vector2){ch->pos.x + (i * 16), ch->pos.y + (j * 16)});
+      }
+    }
+  }
+
+  if((ns == UP) && (ew == RIGHT)) {
+    for(int i = 0; i < ch->width; i++) {
+      for(int j = 0; j < ch->height; j++) {
+        addGameBlock(gm, gm->blocks, BLOCK, bt, (Vector2){ch->pos.x + (i * 16), ch->pos.y - (j * 16)});
+      }
+    }
+  }
+
+  if((ns == UP) && (ew == LEFT)) {
+    for(int i = 0; i < ch->width; i++) {
+      for(int j = 0; j < ch->height; j++) {
+        addGameBlock(gm, gm->blocks, BLOCK, bt, (Vector2){ch->pos.x - (i * 16), ch->pos.y - (j * 16)});
+      }
+    }
+  }
+
+  if((ns == DOWN) && (ew == LEFT)) {
+    for(int i = 0; i < ch->width; i++) {
+      for(int j = 0; j < ch->height; j++) {
+        addGameBlock(gm, gm->blocks, BLOCK, bt, (Vector2){ch->pos.x - (i * 16), ch->pos.y + (j * 16)});
+      }
+    }
+  }
+
+  for(int i = 0; i < gm->blocks->counter; i++) {
+    if(gm->blocks->ents[i].b.bt != MOBSPAWNER) {
+      blockWeightChecker(&gm->blocks->ents[i], gm->blocks->ents, gm->blocks->counter);
+      blockSourceDestChecker(&gm->blocks->ents[i]);
+    }
+  }
+  
+}
+
 void addChunkSpawner(struct game* gm, struct chunk * ch) {
   if(ch->hasSpawner == true) {
     addGameBlockSpawner(gm, gm->blocks, BLOCK, MOBSPAWNER, GetRandomValue(0, 3), (Vector2){ch->pos.x + (GetRandomValue(32, ch->width * 16 - 32)), ch->pos.y - 16});
@@ -655,13 +699,22 @@ void initLevel(struct game * gm, struct level * lvl, int depth, int counter, Vec
   lvl->chunks = malloc(lvl->depth * sizeof(struct chunk));
 
   for(int i = 0; i < lvl->depth; i++) {
-    if(i %  4 == 0) {
+    if(i %  4 == 0 || i % 7 == 0 || i % 3 == 0) {
       initChunk(&lvl->chunks[lvl->chunkCounter], 3, GetRandomValue(10, 12), 0, 1, lvl->pos);
       addChunk(gm, &lvl->chunks[lvl->chunkCounter], GRASS);
     } else if ( i % 2 == 0) {
+      int dirBuff = GetRandomValue(0, 1);
       initChunk(&lvl->chunks[lvl->chunkCounter], GetRandomValue(5, 8), 1, 0, 0, lvl->pos);
-      addChunk(gm, &lvl->chunks[lvl->chunkCounter], LADDER);
-      lvl->pos.y += (lvl->chunks[lvl->chunkCounter].height * 16);
+
+      if(dirBuff > 0) {
+        addChunkDir(gm, &lvl->chunks[lvl->chunkCounter], LADDER, DOWN, RIGHT);
+        lvl->pos.y += ((lvl->chunks[lvl->chunkCounter].height * 16) - 16);
+      }
+
+      if(dirBuff < 1) {
+        addChunkDir(gm, &lvl->chunks[lvl->chunkCounter], LADDER, UP, RIGHT);
+        lvl->pos.y -= ((lvl->chunks[lvl->chunkCounter].height * 16) - 16);
+      }
     } else {
       initChunk(&lvl->chunks[lvl->chunkCounter], 1, GetRandomValue(3, 7), 0, 0, lvl->pos);
       addChunk(gm, &lvl->chunks[lvl->chunkCounter], DIRT);
