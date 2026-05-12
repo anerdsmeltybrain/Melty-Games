@@ -1,6 +1,9 @@
 #include <raylib.h>
 #include <stdlib.h>
 
+#define VIRTUAL_WIDTH 320
+#define VIRTUAL_HEIGHT 180
+
 enum screenType {
   TITLE,
   MAINMENU,
@@ -242,10 +245,25 @@ struct title {
   struct itemList * orbs;
 };
 
+struct main {
+  Texture2D textures[4];
+  struct Rectangle Buttons[3];
+  int mouseX, mouseY;
+  int choice;
+};
+
+struct options {
+  Texture2D textures[4];
+};
+
 //title screen functions
 void initTitle(struct title *);
 void updateTitle(struct title *);
 void drawTitle(struct title *);
+
+void initMainMenu(struct main *);
+void updateMainMenu(struct main *, enum screenType *);
+void drawMainMenu(struct main *);
 
 //Entity Functions
 void initEntity(struct Entity *, enum entityType, Vector2);
@@ -320,7 +338,7 @@ void blockSourceDestChecker(struct Entity *);
 
 int main() {
   int screenWidth = 640;
-  int screenHeight = 480;
+  int screenHeight = 360;
   int playerScore = 0;
 
   enum screenType screens;
@@ -330,10 +348,16 @@ int main() {
   struct game mainGame;
   struct level mainLevel;
   struct title titleScreen;
+  struct main mainMenu;
   Camera2D camera = { 0 };
+  Vector2 mousePos = { 0 };
 
   InitWindow(screenWidth, screenHeight, "Jungle Run");
   SetTargetFPS(60);
+
+  int virtualWidth = 320;
+  int virtualHeight = 180;
+  RenderTexture2D target = LoadRenderTexture(virtualWidth, virtualHeight);
 
 init:
   //init data for each screen
@@ -342,6 +366,7 @@ init:
       initTitle(&titleScreen);
       break;
     case MAINMENU:
+      initMainMenu(&mainMenu);
       break;
     case GAME:
       initGame(&mainGame, 5, 0);
@@ -355,10 +380,10 @@ init:
       addLevelSpawners(&mainGame, &mainLevel);
   
       //camera functionalities
-      camera.offset = (Vector2){screenWidth / 2, screenHeight / 2};
+      camera.offset = (Vector2){VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2};
       camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
       camera.rotation = 0.0f;
-      camera.zoom = 2.0f;
+      camera.zoom = 1.0f;
       break;
     case OPTIONS:
       break;
@@ -372,12 +397,15 @@ init:
     switch(screens) {
       case TITLE:
         if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE)) {
-          screens = GAME;
+          screens = MAINMENU;
           goto init;
         }
         updateTitle(&titleScreen);
         break;
       case MAINMENU:
+        updateMainMenu(&mainMenu, &screens);
+        if(screens == GAME)
+            goto init;
         break;
       case GAME:
         camera.target = (Vector2){mainGame.players->ents[0].destRect.x + 8, mainGame.players->ents[0].destRect.y + 8};
@@ -417,15 +445,15 @@ init:
       case END:
         break;
     }
-    
-    BeginDrawing();
+
+    BeginTextureMode(target);
     ClearBackground(BLACK);
-    //drawings per screen
       switch(screens) {
         case TITLE:
           drawTitle(&titleScreen);
           break;
         case MAINMENU:
+          drawMainMenu(&mainMenu);
           break;
         case GAME:
           BeginMode2D(camera);
@@ -440,6 +468,16 @@ init:
         case END:
           break;
       }
+    EndTextureMode();
+    
+    BeginDrawing();
+    ClearBackground(BLACK);
+
+      DrawTexturePro(target.texture,
+                    (Rectangle){0, 0, (float)target.texture.width, (float)-target.texture.height},
+                    (Rectangle){0, 0, GetScreenWidth(), GetScreenHeight()},
+                    (Vector2){0, 0}, 0.0f, WHITE);
+    
     EndDrawing();
   }
 
@@ -464,13 +502,13 @@ void updateTitle(struct title * title) {
 
     if (title->orbs->counter == 0) {
       // title->orbs->ents = realloc(title->orbs->ents, sizeof (struct Entity));
-      initItem(&title->orbs->items[title->orbs->counter], GetRandomValue(1, 4), (Vector2){GetRandomValue(32, 640), 0});
+      initItem(&title->orbs->items[title->orbs->counter], GetRandomValue(1, 4), (Vector2){GetRandomValue(32, 288), 0});
       title->orbs->counter++;
     } else {
       title->orbs->capacity++;
       // title->orbs->ents = realloc(title->orbs->ents, title->orbs->capacity * sizeof (struct Entity));
       reallocItemList(title->orbs);
-      initItem(&title->orbs->items[title->orbs->counter], GetRandomValue(1, 4), (Vector2){GetRandomValue(32, 640), 0});
+      initItem(&title->orbs->items[title->orbs->counter], GetRandomValue(1, 4), (Vector2){GetRandomValue(32, 288), 0});
       title->orbs->counter++;
     }
 
@@ -497,10 +535,89 @@ void drawTitle(struct title * title) {
     DrawTextureEx(title->orbs->items[i].texture, (Vector2){title->orbs->items[i].destRect.x, title->orbs->items[i].destRect.y}, 0.0f, 2.0f, WHITE);
   }
 
-  DrawTextureEx(title->titleBanner, (Vector2){(GetScreenWidth() / 2) - ((title->titleBanner.width * 2) / 2), (GetScreenHeight() / 2) - ((title->titleBanner.height * 2) / 2)}, 0.0f, 2.0f, WHITE);
+  DrawTextureEx(title->titleBanner, (Vector2){(VIRTUAL_WIDTH / 2) - ((title->titleBanner.width * 2) / 2), (VIRTUAL_HEIGHT / 2) - ((title->titleBanner.height * 2) / 2)}, 0.0f, 2.0f, WHITE);
   
 }
 
+void initMainMenu(struct main * mm) {
+
+  static int scale = 2;
+
+  mm->textures[0] = LoadTexture("./assets/titleBanner.png");
+  mm->textures[1] = LoadTexture("./assets/playBanner.png");
+  mm->textures[2] = LoadTexture("./assets/optionsBanner.png");
+  mm->textures[3] = LoadTexture("./assets/exitBanner.png");
+
+  mm->Buttons[0] = (Rectangle){((VIRTUAL_WIDTH / 2) - ((mm->textures[1].width * 2) / 2)), 64, mm->textures[1].width * scale, mm->textures[1].height * scale};
+  mm->Buttons[1] = (Rectangle){((VIRTUAL_WIDTH / 2) - ((mm->textures[2].width * 2) / 2)), 96, mm->textures[2].width * scale, mm->textures[2].height * scale};
+  mm->Buttons[2] = (Rectangle){((VIRTUAL_WIDTH / 2) - ((mm->textures[3].width * 2) / 2)), 128, mm->textures[3].width * scale, mm->textures[3].height * scale};
+
+  mm->choice = 0;
+}
+
+void updateMainMenu(struct main * mm, enum screenType * st) {
+
+  mm->mouseX = GetMouseX();
+  mm->mouseY = GetMouseY();
+
+  if(IsKeyPressed(KEY_W)) {
+    mm->choice--;
+  }
+
+  if(IsKeyPressed(KEY_S)) {
+    mm->choice++;
+  }
+
+  if(mm->choice < 0)
+    mm->choice = 2;
+
+  if(mm->choice > 2)
+    mm->choice = 0;
+
+  if(CheckCollisionPointRec((Vector2){mm->mouseX, mm->mouseY}, mm->Buttons[0])) {
+    mm->choice = 0;
+  }
+  if(CheckCollisionPointRec((Vector2){mm->mouseX, mm->mouseY}, mm->Buttons[1])) {
+    mm->choice = 1;
+  }
+  if(CheckCollisionPointRec((Vector2){mm->mouseX, mm->mouseY}, mm->Buttons[2])) {
+    mm->choice = 2;
+  }
+
+  if(IsKeyPressed(KEY_H) && mm->choice == 0) {
+    *st = GAME;
+  }
+  if(IsKeyPressed(KEY_H) && mm->choice == 1) {
+    *st = OPTIONS;
+  }
+  if(IsKeyPressed(KEY_H) && mm->choice == 2) {
+    *st = END;
+  }
+}
+
+void drawMainMenu(struct main * mm) {
+
+  DrawTextureEx(mm->textures[0], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[0].width * 2) / 2)), 32}, 0.0f, 2.0f, WHITE);
+  DrawTextureEx(mm->textures[1], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[1].width * 2) / 2)), 64}, 0.0f, 2.0f, WHITE);
+  DrawTextureEx(mm->textures[2], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[2].width * 2) / 2)), 96}, 0.0f, 2.0f, WHITE);
+  DrawTextureEx(mm->textures[3], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[3].width * 2) / 2)), 128}, 0.0f, 2.0f, WHITE);
+
+  // DrawRectangleLinesEx(mm->Buttons[0], 1, WHITE);
+  // DrawRectangleLinesEx(mm->Buttons[1], 1, WHITE);
+  // DrawRectangleLinesEx(mm->Buttons[2], 1, WHITE);
+
+  switch(mm->choice) {
+    case 0:
+      DrawRectangleLinesEx((Rectangle){mm->Buttons[0].x - 8, mm->Buttons[0].y - 8, mm->Buttons[0].width + 16, mm->Buttons[0].height + 16}, 1.0f, WHITE);
+      break;
+    case 1:
+      DrawRectangleLinesEx((Rectangle){mm->Buttons[1].x - 8, mm->Buttons[1].y - 8, mm->Buttons[1].width + 16, mm->Buttons[1].height + 16}, 1.0f, WHITE);
+      break;
+    case 2:
+      DrawRectangleLinesEx((Rectangle){mm->Buttons[2].x - 8, mm->Buttons[2].y - 8, mm->Buttons[2].width + 16, mm->Buttons[2].height + 16}, 1.0f, WHITE);
+      break;
+  }
+}
 
 void initChunk(struct chunk * ch, int height, int width, bool hasL, bool hasS, Vector2 pos) {
   ch->height = height;
@@ -596,7 +713,7 @@ void initEntity(struct Entity * ent, enum entityType et, Vector2 pos) {
 
 
 void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType pt, Vector2 pos) {
-  static int Scale = 3;
+  static int Scale = 1;
   ent->et = et;
   ent->isActive = true;
   ent->destRect = (Rectangle){pos.x, pos.y, 16, 16};
@@ -686,37 +803,26 @@ void initEntityPlayer(struct Entity * ent, enum entityType et, enum playerType p
 
 void drawAbilities(struct Entity * ent) {
 
-  // DrawTextureEx(ent->p.abs.UIBanner, (Vector2){0,0}, 0, 3, WHITE);
+  static int scale = 1;
+
   for(int i = 0; i < ent->p.health; i++) {
-    DrawTextureEx(ent->p.abs.textures[3], (Vector2){ent->p.abs.positions[3].x + (i * 32), ent->p.abs.positions[3].y}, 0, 3, WHITE);
+    DrawTextureEx(ent->p.abs.textures[3], (Vector2){ent->p.abs.positions[3].x + (i * 12 * scale), ent->p.abs.positions[3].y}, 0, scale, WHITE);
   }
   for(int i = 0; i < ent->p.overHeal; i++) {
-    DrawTextureEx(ent->p.abs.textures[4], (Vector2){ent->p.abs.positions[4].x + (i * 16), ent->p.abs.positions[4].y}, 0, 3, WHITE);
+    DrawTextureEx(ent->p.abs.textures[4], (Vector2){ent->p.abs.positions[4].x + (i * 8 * scale), ent->p.abs.positions[4].y}, 0, scale, WHITE);
   }
-  // DrawTextureEx(ent->p.abs.textures[0], ent->p.abs.positions[0], 0, 3, WHITE);
-  // if(ent->p.abs.timers[0] > 0) {
-  //   DrawText(TextFormat("%d", ent->p.abs.timers[0]), ent->p.abs.positions[0].x, ent->p.abs.positions[0].y, 12, WHITE);
-  // }
-  // DrawTextureEx(ent->p.abs.textures[1], ent->p.abs.positions[1], 0, 3, WHITE);
-  // if(ent->p.abs.timers[1] > 0) {
-  //   DrawText(TextFormat("%d", ent->p.abs.timers[1]), ent->p.abs.positions[1].x, ent->p.abs.positions[1].y, 12, WHITE);
-  // }
-  // DrawTextureEx(ent->p.abs.textures[2], ent->p.abs.positions[2], 0, 3, WHITE);
-  // if(ent->p.abs.timers[2] > 0) {
-  //   DrawText(TextFormat("%d", ent->p.abs.timers[2]), ent->p.abs.positions[2].x, ent->p.abs.positions[2].y, 12, WHITE);
-  // }
   if(ent->p.boosts > 0)
-    DrawTextureEx(ent->p.abs.textures[5], ent->p.abs.positions[5], 0, 3, WHITE);
+    DrawTextureEx(ent->p.abs.textures[5], ent->p.abs.positions[5], 0, scale, WHITE);
   for(int i = 0; i < ent->p.boosts; i++) {
-    DrawTextureEx(ent->p.abs.textures[5], (Vector2){ent->p.abs.positions[5].x + (i * 24), ent->p.abs.positions[5].y}, 0, 3, WHITE);
+    DrawTextureEx(ent->p.abs.textures[5], (Vector2){ent->p.abs.positions[5].x + (i * 8 * scale), ent->p.abs.positions[5].y}, 0, scale, WHITE);
   }
   if(ent->p.bombs > 0)
-    DrawTextureEx(ent->p.abs.textures[6], ent->p.abs.positions[6], 0, 3, WHITE);
+    DrawTextureEx(ent->p.abs.textures[6], ent->p.abs.positions[6], 0, scale, WHITE);
   for(int i = 0; i < ent->p.bombs; i++) {
-    DrawTextureEx(ent->p.abs.textures[6], (Vector2){ent->p.abs.positions[6].x + (i * 24), ent->p.abs.positions[6].y}, 0, 3, WHITE);
+    DrawTextureEx(ent->p.abs.textures[6], (Vector2){ent->p.abs.positions[6].x + (i * 8 * scale), ent->p.abs.positions[6].y}, 0, scale, WHITE);
   }
-  DrawTextureEx(ent->p.abs.textures[7], ent->p.abs.positions[7], 0, 3, WHITE);
-  DrawText(TextFormat("%d", ent->p.coins), ent->p.abs.positions[7].x + 24, ent->p.abs.positions[7].y + 16, 12, WHITE);
+  DrawTextureEx(ent->p.abs.textures[7], ent->p.abs.positions[7], 0, 1, WHITE);
+  DrawText(TextFormat("%d", ent->p.coins), ent->p.abs.positions[7].x + 8 * scale, ent->p.abs.positions[7].y + 8 * scale, 8, WHITE);
 
 }
 
@@ -1368,7 +1474,7 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
   
 
     for(int i = 0; i < blocks->capacity; i++) {
-      if((CheckCollisionRecs(player->destRect, blocks->ents[i].destRect)) && (blocks->ents[i].b.bt == LADDER) && (IsKeyDown(KEY_S))) {
+      if((CheckCollisionRecs(player->destRect, blocks->ents[i].destRect)) && (blocks->ents[i].b.bt == LADDER) && ((IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)))) {
         // player->destRect.y -= fallSpeed;
         fallCounter = 0;
         player->destRect.y += fallSpeed;
@@ -1384,7 +1490,7 @@ void playerPhysics(struct Entity * player, struct entityList * blocks) {
       }
     }
 
-    if(IsKeyDown(KEY_W) && fallCounter < 30) {
+    if((IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) && fallCounter < 30) {
       player->destRect.y -= 2;
       fallCounter++;
     }
@@ -1455,7 +1561,7 @@ void playerAnimations(struct Entity * player) {
 
 void playerControls(struct Entity * player) {
 
-    if(IsKeyDown(KEY_D)) {
+    if(IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) {
       player->p.ps = MOVING;
       player->p.idleBool = true;
       player->destRect.x += player->p.speed;
@@ -1463,7 +1569,7 @@ void playerControls(struct Entity * player) {
         player->p.dir = RIGHT;
         player->sourceRect.width *= -1;
       }
-    } else if(IsKeyDown(KEY_A)) {
+    } else if(IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) {
       player->p.ps = MOVING;
       player->p.idleBool = true;
       player->destRect.x -= player->p.speed;
@@ -1493,17 +1599,6 @@ void playerControls(struct Entity * player) {
       player->p.speedBuffer = 0;
       player->p.boosts--;
     }
-    // if(IsKeyPressed(KEY_J) && player->p.abs.timers[0] <= 0) {
-    //   player->p.abs.timers[0] = 5;
-    // }
-
-    // if(IsKeyPressed(KEY_K) && player->p.abs.timers[0] <= 0) {
-    //   player->p.abs.timers[1] = 8;
-    // }
-
-    // if(IsKeyPressed(KEY_L) && player->p.abs.timers[0] <= 0) {
-    //   player->p.abs.timers[2] = 12;
-    // }
 }
 
 void mobPhysics(struct game * gm, struct Entity * mob, struct entityList * blocks) {
