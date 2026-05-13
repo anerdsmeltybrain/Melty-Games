@@ -1,6 +1,10 @@
 #include <raylib.h>
 #include <stdlib.h>
 
+#if defined(PLATFORM_WEB)
+  #include <emscripten/emscripten.h>
+#endif
+
 #define VIRTUAL_WIDTH 320
 #define VIRTUAL_HEIGHT 180
 
@@ -256,11 +260,15 @@ struct options {
   Texture2D textures[4];
 };
 
+//updateDraw
+void updateDraw();
+
 //title screen functions
 void initTitle(struct title *);
 void updateTitle(struct title *);
 void drawTitle(struct title *);
 
+//mainMenu screen Functions
 void initMainMenu(struct main *);
 void updateMainMenu(struct main *, enum screenType *);
 void drawMainMenu(struct main *);
@@ -558,14 +566,20 @@ void initMainMenu(struct main * mm) {
 
 void updateMainMenu(struct main * mm, enum screenType * st) {
 
+  static bool choiceBuffer;
+
+  if(IsKeyReleased(KEY_SPACE)) {
+    choiceBuffer = true;
+  }
+
   mm->mouseX = GetMouseX();
   mm->mouseY = GetMouseY();
 
-  if(IsKeyPressed(KEY_W)) {
+  if(IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) {
     mm->choice--;
   }
 
-  if(IsKeyPressed(KEY_S)) {
+  if(IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) {
     mm->choice++;
   }
 
@@ -585,15 +599,20 @@ void updateMainMenu(struct main * mm, enum screenType * st) {
     mm->choice = 2;
   }
 
-  if(IsKeyPressed(KEY_H) && mm->choice == 0) {
+  if(IsKeyPressed(KEY_SPACE) && mm->choice == 0 && choiceBuffer == true) {
     *st = GAME;
   }
-  if(IsKeyPressed(KEY_H) && mm->choice == 1) {
+
+  if(IsKeyPressed(KEY_SPACE) && mm->choice == 1 && choiceBuffer == true) {
     *st = OPTIONS;
   }
-  if(IsKeyPressed(KEY_H) && mm->choice == 2) {
+
+  if(IsKeyPressed(KEY_SPACE) && mm->choice == 2 && choiceBuffer == true) {
     *st = END;
   }
+
+  choiceBuffer++;
+
 }
 
 void drawMainMenu(struct main * mm) {
@@ -602,6 +621,8 @@ void drawMainMenu(struct main * mm) {
   DrawTextureEx(mm->textures[1], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[1].width * 2) / 2)), 64}, 0.0f, 2.0f, WHITE);
   DrawTextureEx(mm->textures[2], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[2].width * 2) / 2)), 96}, 0.0f, 2.0f, WHITE);
   DrawTextureEx(mm->textures[3], (Vector2){((VIRTUAL_WIDTH / 2) - ((mm->textures[3].width * 2) / 2)), 128}, 0.0f, 2.0f, WHITE);
+
+  DrawText("W\\S or arrow keys to navigate\nPress space to choosea", 0, 0, 8, WHITE);
 
   // DrawRectangleLinesEx(mm->Buttons[0], 1, WHITE);
   // DrawRectangleLinesEx(mm->Buttons[1], 1, WHITE);
