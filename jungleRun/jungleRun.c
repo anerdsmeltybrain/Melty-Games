@@ -1,10 +1,6 @@
 #include <raylib.h>
 #include <stdlib.h>
 
-#if defined(PLATFORM_WEB)
-  #include <emscripten/emscripten.h>
-#endif
-
 #define VIRTUAL_WIDTH 320
 #define VIRTUAL_HEIGHT 180
 
@@ -273,6 +269,11 @@ void initMainMenu(struct main *);
 void updateMainMenu(struct main *, enum screenType *);
 void drawMainMenu(struct main *);
 
+//Options Screen Functions
+void initOptionMenu(struct options *);
+void updateOptionMenu(struct options *, enum screenType *);
+void drawOptionMenu(struct options *);
+
 //Entity Functions
 void initEntity(struct Entity *, enum entityType, Vector2);
 void initEntityPlayer(struct Entity *, enum entityType, enum playerType, Vector2);
@@ -358,6 +359,7 @@ int main() {
   struct level mainLevel;
   struct title titleScreen;
   struct main mainMenu;
+  struct options optionsMenu;
   Camera2D camera = { 0 };
   Vector2 mousePos = { 0 };
 
@@ -395,6 +397,7 @@ init:
       camera.zoom = 1.0f;
       break;
     case OPTIONS:
+      initOptionMenu(&optionsMenu);
       break;
     case END:
       break;
@@ -450,6 +453,7 @@ init:
         damagePhysics(&mainGame);
         break;
       case OPTIONS:
+        updateOptionMenu(&optionsMenu, &screens);
         break;
       case END:
         break;
@@ -473,6 +477,7 @@ init:
           drawAbilities(&mainGame.players->ents[0]);
           break;
         case OPTIONS:
+          drawOptionMenu(&optionsMenu);
           break;
         case END:
           break;
@@ -1669,6 +1674,12 @@ void playerControls(struct Entity * player) {
     if(IsKeyPressed(KEY_K) && player->p.boosts > 0) {
       player->p.ps = IDLE;
       player->p.speed += 1;
+      if(player->p.dir == RIGHT) {
+        player->destRect.x += 32;
+      }
+      if (player->p.dir == LEFT) {
+        player->destRect.x -= 32;
+      }
       player->p.speedBool = true;
       player->p.speedBuffer = 0;
       player->p.boosts--;
